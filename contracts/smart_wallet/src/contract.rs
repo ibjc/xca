@@ -5,7 +5,7 @@ use cosmwasm_std::{
     MessageInfo, QueryRequest, Response, StdError, StdResult, Uint128,
     WasmMsg, WasmQuery, BankQuery, AllBalanceResponse, Coin, Decimal,
 };
-use xca::wormhole::{ConfigResponse, ExecuteMsg, QueryMsg, InstantiateMsg, WormholeExecuteMsg, WormholeQueryMsg, ParsedVAA};
+use xca::wormhole::{ConfigResponse, ExecuteMsg, QueryMsg, InstantiateMsg, WormholeExecuteMsg, WormholeQueryMsg, ParsedVAA, AccountInfo};
 use cw20::{Cw20ExecuteMsg, Cw20QueryMsg, BalanceResponse as Cw20BalanceResponse};
 use crate::state::{Config, CONFIG, VAA_ARCHIVE, TokenBridgeMessage, State, STATE};
 use std::str::FromStr;
@@ -53,8 +53,10 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
 
         //dispatch arbitrary data to wormhole; recipient is itself
         ExecuteMsg::WormholeDispatch {
-            payload
-        } => wormhole_dispatch(deps, info, payload),
+            payload,
+            nonce,
+            receiver,
+        } => wormhole_dispatch(deps, info, payload, nonce, receiver),
 
         ExecuteMsg::WormholeReceive {vaa} => wormhole_receive(deps, env, info, vaa),
     }
@@ -65,12 +67,14 @@ pub fn wormhole_dispatch(
     deps: DepsMut,
     info: MessageInfo,
     payload: Binary,
+    nonce: Option<u32>,
+    receiver: Option<AccountInfo>,
 ) -> StdResult<Response> {
 
     let config: Config = CONFIG.load(deps.storage)?;
 
     let message_payload = TokenBridgeMessage{
-        payload: payload.to_vec()
+        payload: payload.into()
     };
 
     let message: CosmosMsg = CosmosMsg::Wasm(WasmMsg::Execute{
@@ -78,7 +82,7 @@ pub fn wormhole_dispatch(
         funds: vec![],
         msg: to_binary(&WormholeExecuteMsg::PostMessage{
             message: to_binary(&message_payload.serialize())?,
-            nonce: 1u32,
+            nonce: nonce.unwrap_or(69u32),
         })?
     });
 
@@ -93,6 +97,9 @@ pub fn wormhole_receive(
     vaa: Binary
 ) -> StdResult<Response> {
     let (vaa, message) = parse_and_archive_vaa(deps, env, &vaa)?;
+
+    //
+    
 
     Ok(Response::new())
 }

@@ -28,7 +28,9 @@ pub enum ExecuteMsg {
 
     //emitter only
     WormholeDispatch{
-        payload: Binary,
+        payload: Binary, //payload itself is a [action_id, action_payload]
+        nonce: Option<u32>,
+        receiver: Option<AccountInfo>,
     },
 
     //all

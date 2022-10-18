@@ -31,6 +31,8 @@ terra = LCDClient(url="https://pisco-lcd.terra.dev/", chain_id="pisco-1")
 
 nuhmonik = " ".join(["zebra" for x in range(24)])
 testnet_deployer_wallet = terra.wallet(MnemonicKey(mnemonic=nuhmonik))
+local_deployer_wallet = terra_local.wallet(MnemonicKey(mnemonic=nuhmonik))
+
 
 ################################################
 # deploy func
@@ -92,7 +94,7 @@ def migrate_msg(contract_address, new_code_id, msg, wallet, terra):
 
   return tx_result
 
-def bank_msg_send(recipient, amount, wallet, terrra):
+def bank_msg_send(recipient, amount, wallet, terra):
 
   bank_msg = MsgSend(
     from_address=wallet.key.acc_address,
@@ -117,5 +119,5 @@ def proto_to_binary(msg):
 # deploy code id
 ################################################
 
-wormhole_code_id = deploy_local_wasm("/repos/xca/artifacts/xca.wasm", testnet_deployer_wallet, terra)
+wormhole_code_id = deploy_local_wasm("/repos/xca/artifacts/smart_wallet.wasm", local_deployer_wallet, terra_local)
 
