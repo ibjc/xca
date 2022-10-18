@@ -23,12 +23,6 @@ from terra_proto.cosmwasm.wasm.v1 import AccessType
 import time
 
 ################################################
-# parse configs
-################################################
-
-contracts_df = pd.read_csv("/repos/metadata/contracts.tsv", sep="\t")
-
-################################################
 # terra objects
 ################################################
 

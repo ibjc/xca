@@ -1,5 +1,5 @@
 [package]
-name = "zodiac-wormhole"
+name = "smart_wallet"
 version = "0.1.0"
 authors = ["Ninetyfour"]
 edition = "2018"
@@ -28,12 +28,11 @@ cw20 = { version = "0.13.4" }
 cosmwasm-std = { version = "1.0.0", features = ["iterator", "stargate"] }
 cosmwasm-storage = { version = "1.0.0", features = ["iterator"] }
 cw-storage-plus = { version = "0.13.4", features = ["iterator"]}
-zodiac = { path = "../../packages/zodiac", default-features = false, version = "0.1.0"}
 schemars = "0.8.1"
 serde = { version = "1.0.103", default-features = false, features = ["derive"] }
 thiserror = { version = "1.0.20" }
-astroport = { git = "https://github.com/astroport-fi/astroport-core", rev = "refs/pull/308/head" }
 cw-asset = "2.2.0"
+xca = { path = "../../packages/xca", default-features = false, version = "0.1.0"}
 
 [dev-dependencies]
 cosmwasm-schema = "1.0.0"

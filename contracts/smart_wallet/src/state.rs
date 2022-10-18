@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use cw_storage_plus::{Item, Map};
 use cw_asset::AssetInfo;
-use zodiac::wormhole::AccountInfo;
+use xca::wormhole::AccountInfo;
 
 pub const CONFIG: Item<Config> = Item::new("\u{0}\u{6}config");
 pub const STATE: Item<State> = Item::new("\u{0}\u{7}state");

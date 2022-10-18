@@ -1,7 +1,7 @@
 [workspace]
 members = ["packages/*", "contracts/*"]
 
-[profile.release.package.zodiac]
+[profile.release.package.xca]
 opt-level = 3
 debug = false
 debug-assertions = false
