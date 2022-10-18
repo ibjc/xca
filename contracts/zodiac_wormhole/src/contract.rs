@@ -5,9 +5,9 @@ use cosmwasm_std::{
     MessageInfo, QueryRequest, Response, StdError, StdResult, Uint128,
     WasmMsg, WasmQuery, BankQuery, AllBalanceResponse, Coin, Decimal,
 };
-use zodiac::wormhole::{ConfigResponse, ExecuteMsg, QueryMsg, InstantiateMsg, WormholeExecuteMsg,WormholeQueryMsg};
+use zodiac::wormhole::{ConfigResponse, ExecuteMsg, QueryMsg, InstantiateMsg, WormholeExecuteMsg, WormholeQueryMsg, ParsedVAA};
 use cw20::{Cw20ExecuteMsg, Cw20QueryMsg, BalanceResponse as Cw20BalanceResponse};
-use crate::state::{Config, CONFIG, VAA_ARCHIVE, ParsedVAA, TokenBridgeMessage, State, STATE};
+use crate::state::{Config, CONFIG, VAA_ARCHIVE, TokenBridgeMessage, State, STATE};
 use std::str::FromStr;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
