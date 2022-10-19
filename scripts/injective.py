@@ -251,6 +251,13 @@ wormhole_code_id = deploy_local_wasm("/repos/xca/artifacts/smart_wallet.wasm", w
 
 msg_runner_id = deploy_local_wasm("/repos/xca/artifacts/zodiac_msg_runner.wasm", wallet, inj)
 
+shouter_id = deploy_local_wasm("/repos/xca/artifacts/shouter.wasm", wallet, inj)
+
+################################################
+# hardcoded contracts
+################################################
+
+wormhole_contract = "inj1xx3aupmgv3ce537c0yce8zzd3sz567syuyedpg"
 
 ################################################
 # setup msg_runner
@@ -284,3 +291,20 @@ init_cw20 = {
 
 init_result = init_contract("63", init_cw20, wallet, inj, "testcoin")
 testcoin_address = init_result.logs[0].events_by_type["instantiate"]["_contract_address"][0]
+
+
+################################################
+# setup shouter
+################################################
+
+init_result = init_contract(shouter_id, {}, wallet, inj, "shouter")
+shouter_address = init_result.logs[0].events_by_type["instantiate"]["_contract_address"][0]
+
+
+execute_msg(shouter_address, {"submit_vaa":{ "vaa": to_binary({"shout": "out"})}}, wallet, inj)
+
+
+################################################
+# dispatch vaa
+################################################
+execute_msg(wormhole_contract, {"post_message": {"message": to_binary({"foo": "bar"}), "nonce": 1}}, wallet, inj)
