@@ -259,13 +259,14 @@ msg_runner_id = deploy_local_wasm("/repos/xca/artifacts/zodiac_msg_runner.wasm",
 init_result = init_contract(msg_runner_id, {}, wallet, inj, "runner")
 runner_address = init_result.logs[0].events_by_type["instantiate"]["_contract_address"][0]
 
-bank_msg_send(runner_address, Coins.from_str(f"{10_000_000_000}uosmo,{10_000_000_000}uion"), wallet2, osmo)
+#fetch injective markets
+markets = inj.inj.query("/injective/exchange/v1beta1/spot/markets")
+
+#query spot and top of book
+inj.wasm.contract_query(runner_address, {"spot_market_mid_price_and_tob":{"market_id":markets["markets"][0]["market_id"]}})
 
 
-
-
-
-#create cw20
+#create cw20 on inj example
 init_cw20 = {
   "name": "test coin",
   "symbol": "TEST",
