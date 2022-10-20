@@ -21,17 +21,70 @@ import argparse
 from terra_sdk.core.wasm.data import AccessConfig
 from terra_proto.cosmwasm.wasm.v1 import AccessType
 import time
+from terra_sdk.core import AccAddress
+from terra_sdk.core.bech32 import get_bech
+from terra_sdk.client.lcd.api._base import BaseAsyncAPI, sync_bind
+
+from terra_proto.cosmos.tx.v1beta1 import Tx, TxBody, AuthInfo, SignDoc, SignerInfo, ModeInfo, ModeInfoSingle, BroadcastTxResponse
+from terra_proto.cosmos.tx.signing.v1beta1 import SignMode
+from betterproto.lib.google.protobuf import Any
+
+from ecdsa import SECP256k1, SigningKey
+from ecdsa.util import sigencode_string_canonize
+import hashlib
 
 ################################################
 # terra objects
 ################################################
 
-terra_local = LocalTerra()
 terra = LCDClient(url="https://pisco-lcd.terra.dev/", chain_id="pisco-1")
 
 nuhmonik = " ".join(["zebra" for x in range(24)])
-testnet_deployer_wallet = terra.wallet(MnemonicKey(mnemonic=nuhmonik))
-local_deployer_wallet = terra_local.wallet(MnemonicKey(mnemonic=nuhmonik))
+wallet = terra.wallet(MnemonicKey(mnemonic=nuhmonik))
+
+
+################################################
+# inj objects
+################################################
+
+class AsyncInjAPI(BaseAsyncAPI):
+
+    async def query(self, query_string: str):
+        res = await self._c._get(query_string)
+        return res
+
+    async def broadcast(self, tx):
+        res = await self._c._post("/cosmos/tx/v1beta1/txs", {"tx_bytes": proto_to_binary(tx), "mode": "BROADCAST_MODE_BLOCK"})
+        return res
+
+
+class InjAPI(AsyncInjAPI):
+
+    @sync_bind(AsyncInjAPI.query)
+    # see https://lcd-test.osmosis.zone/swagger/#/
+    def query(self, query_string: str):
+        pass
+
+    @sync_bind(AsyncInjAPI.broadcast)
+    def broadcast(self, tx: Tx):
+        pass
+
+inj = LCDClient(url="https://k8s.testnet.lcd.injective.network:443", chain_id="localterra")
+inj.chain_id = "injective-888"
+inj.inj = InjAPI(inj)
+
+#override terra prefix
+class InjKey(MnemonicKey):
+  @property
+  def acc_address(self) -> AccAddress: 
+    if not self.raw_address:
+      raise ValueError("could not compute acc_address: missing raw_address")
+    return AccAddress(get_bech("inj", self.raw_address.hex()))
+
+
+nuhmonik = "differ flight humble cry abandon inherit noodle blood sister potato there denial woman sword divide funny trash empty novel odor churn grid easy pelican"
+inj_wallet = inj.wallet(InjKey(mnemonic=nuhmonik, coin_type=60))
+
 
 
 ################################################
@@ -115,9 +168,159 @@ def proto_to_binary(msg):
   return base64.b64encode(msg.SerializeToString()).decode("utf-8")
 
 
+
+################################################
+# deploy inj func
+################################################
+
+def inj_deploy_local_wasm(file_path, wallet, inj):
+  with open(file_path, "rb") as fp:
+    file_bytes = base64.b64encode(fp.read()).decode()
+    store_code_msg = MsgStoreCode(wallet.key.acc_address, file_bytes, instantiate_permission=AccessConfig(AccessType.ACCESS_TYPE_EVERYBODY, ""))
+
+
+    account_data = inj.inj.query(f"/cosmos/auth/v1beta1/accounts/{wallet.key.acc_address}")
+
+    opts = CreateTxOptions(msgs=[store_code_msg], fee=Fee(5000000, "3000000000000000inj"))
+    opts.account_number = int(account_data["account"]["base_account"]["account_number"])
+    opts.sequence = int(account_data["account"]["base_account"]["sequence"])
+    store_code_tx = wallet.create_and_sign_tx(opts)
+    store_code_result = inj.tx.broadcast(store_code_tx)
+
+  #persist code_id
+  #print(store_code_result)
+  deployed_code_id = store_code_result.logs[0].events_by_type["store_code"]["code_id"][0]
+
+  return deployed_code_id
+
+def inj_init_contract(code_id, init_msg, wallet, inj, name):
+
+  #invoke contract instantiate
+  instantiate_msg = MsgInstantiateContract(
+    wallet.key.acc_address,
+    wallet.key.acc_address,
+    code_id,
+    name,
+    init_msg,
+  )
+
+  account_data = inj.inj.query(f"/cosmos/auth/v1beta1/accounts/{wallet.key.acc_address}")
+
+  opts = CreateTxOptions(msgs=[instantiate_msg], fee=Fee(3000000, "1500000000000000inj"))
+  opts.account_number = int(account_data["account"]["base_account"]["account_number"])
+  opts.sequence = int(account_data["account"]["base_account"]["sequence"])
+
+  #there is a fixed UST fee component now, so it's easier to pay fee in UST
+  instantiate_tx = wallet.create_and_sign_tx(opts)
+  instantiate_tx_result = inj.tx.broadcast(instantiate_tx)
+
+  return instantiate_tx_result
+
+def inj_execute_msg(address, msg, wallet, inj, coins=None):
+
+  execute_msg = MsgExecuteContract(
+    sender=wallet.key.acc_address,
+    contract=address,
+    msg=msg,
+    coins=coins 
+  )
+
+  account_data = inj.inj.query(f"/cosmos/auth/v1beta1/accounts/{wallet.key.acc_address}")
+
+  opts = CreateTxOptions(msgs=[execute_msg], fee=Fee(3000000, "1500000000000000inj"))
+  opts.account_number = int(account_data["account"]["base_account"]["account_number"])
+  opts.sequence = int(account_data["account"]["base_account"]["sequence"])
+
+  tx = wallet.create_and_sign_tx(opts)
+  tx_result = inj.tx.broadcast(tx)
+
+  return tx_result
+
+def inj_bank_msg_send(recipient, amount, wallet, inj):
+
+  bank_msg = MsgSend(
+    from_address=wallet.key.acc_address,
+    to_address=recipient,
+    amount=amount,
+  )
+
+  account_data = inj.inj.query(f"/cosmos/auth/v1beta1/accounts/{wallet.key.acc_address}")
+
+  opts = CreateTxOptions(msgs=[m], fee=Fee(3000000, "1500000000000000inj"))
+  opts.account_number = int(account_data["account"]["base_account"]["account_number"])
+  opts.sequence = int(account_data["account"]["base_account"]["sequence"])
+
+  #there is a fixed UST fee component now, so it's easier to pay fee in UST
+  tx = wallet.create_and_sign_tx(opts)
+  tx_result = inj.tx.broadcast(tx)
+
+  return tx_result
+
+
 ################################################
 # deploy code id
 ################################################
 
-wormhole_code_id = deploy_local_wasm("/repos/xca/artifacts/smart_wallet.wasm", local_deployer_wallet, terra_local)
+#terra-side
+terra_registry_id = deploy_local_wasm("/repos/xca/artifacts/registry.wasm", wallet, terra)
+terra_account_id = "69"
 
+#inj-side
+inj_registry_id = inj_deploy_local_wasm("/repos/xca/artifacts/registry.wasm", inj_wallet, inj)
+inj_account_id = "69"
+
+################################################
+# configs
+################################################
+
+terra_wormhole_core_contract = "terra19nv3xr5lrmmr7egvrk2kqgw4kcn43xrtd5g0mpgwwvhetusk4k7s66jyv0"
+terra_xca_factory = "terra19nv3xr5lrmmr7egvrk2kqgw4kcn43xrtd5g0mpgwwvhetusk4k7s66jyv0"
+
+inj_wormhole_core_contract = "inj1xx3aupmgv3ce537c0yce8zzd3sz567syuyedpg"
+inj_xca_factory = "inj1xx3aupmgv3ce537c0yce8zzd3sz567syuyedpg"
+
+################################################
+# registry init
+################################################
+
+
+#create registry on terra
+init_registry_terra = {
+  "wormhole_core_contract": terra_wormhole_core_contract,
+  "x_account_factory" : terra_xca_factory,
+  "wormhole_chain_ids": [
+    {
+      "name": "terra",
+      "wormhole_id": 18,
+    },
+    {
+      "name": "injective",
+      "wormhole_id": 19,
+    }
+  ],
+  "x_account_code_id": int(terra_account_id),
+}
+
+init_result = init_contract(terra_registry_id, init_registry_terra, wallet, terra, "terra_registry")
+terra_registry_address= init_result.logs[0].events_by_type["instantiate"]["_contract_address"][0]
+
+
+#create registry on inj
+init_registry_inj = {
+  "wormhole_core_contract": inj_wormhole_core_contract,
+  "x_account_factory" : inj_xca_factory,
+  "wormhole_chain_ids": [
+    {
+      "name": "terra",
+      "wormhole_id": 18,
+    },
+    {
+      "name": "injective",
+      "wormhole_id": 19,
+    }
+  ],
+  "x_account_code_id": int(inj_account_id),
+}
+
+init_result = inj_init_contract(inj_registry_id, init_registry_inj, inj_wallet, inj, "inj_registry")
+inj_registry_address = init_result.logs[0].events_by_type["instantiate"]["_contract_address"][0]

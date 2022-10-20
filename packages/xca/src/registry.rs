@@ -13,7 +13,6 @@ pub enum ExecuteMsg{
   UpdateConfig{
     wormhole_core_contract: Option<String>,
     x_account_factory: Option<String>,
-    wormhole_chain_ids: Option<Vec<Chain>>,
     x_account_code_id: Option<u64>,
   },
   UpsertWormholeChainId{
