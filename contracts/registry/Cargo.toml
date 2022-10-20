@@ -1,7 +1,7 @@
 [package]
-name = "staking"
+name = "registry"
 version = "0.1.0"
-authors = ["John Y <j@publicawesome.com>"]
+authors = ["root"]
 edition = "2021"
 
 exclude = [
