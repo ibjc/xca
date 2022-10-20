@@ -3,6 +3,10 @@ pub mod math;
 
 //periphery
 pub mod wormhole;
+pub mod account;
+pub mod factory;
+pub mod messages;
+pub mod request;
 
 //stargate
 pub mod cosmos {
