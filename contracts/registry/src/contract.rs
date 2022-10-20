@@ -4,7 +4,7 @@ use cosmwasm_std::{Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
 // use cw2::set_contract_version;
 
 use crate::state::{Config, CONFIG};
-use xca::registry::{ExecuteMsg, InstantiateMsg, QueryMsg, ConfigResponse};
+use xca::registry::{ExecuteMsg, InstantiateMsg, QueryMsg, ConfigResponse, Chain};
 
 /*
 // version info for migration info
@@ -33,16 +33,52 @@ pub fn instantiate(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(
     deps: DepsMut,
-    env: Env,
-    info: MessageInfo,
+    _env: Env,
+    _info: MessageInfo,
     msg: ExecuteMsg,
 ) -> StdResult<Response>  {
     match msg {
         ExecuteMsg::UpdateConfig{wormhole_core_contract, x_account_factory, x_account_code_id} => {
+
+            let mut config: Config = CONFIG.load(deps.storage)?;
+
+            // TODO: access check - if config.wormhole_core_contract != owner
+
+            if let Some(wormhole_core_contract) = wormhole_core_contract{
+                config.wormhole_core_contract = deps.api.addr_validate(&wormhole_core_contract)?;
+            }
+
+            if let Some(x_account_factory) = x_account_factory{
+                config.x_account_factory = deps.api.addr_validate(&x_account_factory)?;
+            }
+
+            if let Some(x_account_code_id) = x_account_code_id{
+                config.x_account_code_id = x_account_code_id;
+            }
+
+            CONFIG.save(deps.storage, &config)?;
+
             Ok(Response::new())
         },
         ExecuteMsg::UpsertWormholeChainId{chain} => {
 
+            let mut config: Config = CONFIG.load(deps.storage)?;
+
+            // TODO: access check - if config.wormhole_core_contract != owner
+
+            let position = config.wormhole_chain_ids.iter().position(|x| x.name == chain.name);
+
+            if let Some(position) = position {
+                config.wormhole_chain_ids.remove(position);
+            }
+
+            config.wormhole_chain_ids.push(Chain{
+                name: chain.name,
+                wormhole_id: chain.wormhole_id,
+            });
+
+            CONFIG.save(deps.storage, &config)?;
+            
             Ok(Response::new())
         },
     }
