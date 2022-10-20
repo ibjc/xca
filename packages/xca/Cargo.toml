@@ -26,6 +26,8 @@ prost = "0.10"
 prost-types = "0.10" 
 cw-asset = "2.2.0"
 cosmwasm-schema = "1.1.5"
+thiserror = { version = "1.0.31" }
+sha3 = { version = "0.9.1", default-features = false }
 
 [dev-dependencies]
 cosmwasm-schema = "1.0.0"
