@@ -277,11 +277,15 @@ terra_account_id = "69"
 
 terra_multisig_code_id = deploy_local_wasm("/repos/cw-plus/artifacts/cw3_fixed_multisig.wasm", wallet, terra)
 
+terra_staking_id = deploy_local_wasm("/repos/xca/artifacts/staking.wasm", wallet, terra)
+
 #inj-side
 inj_registry_id = inj_deploy_local_wasm("/repos/xca/artifacts/registry.wasm", inj_wallet, inj)
 inj_account_id = "69"
 
 inj_multisig_code_id = inj_deploy_local_wasm("/repos/cw-plus/artifacts/cw3_fixed_multisig.wasm", inj_wallet, inj)
+
+inj_staking_id = inj_deploy_local_wasm("/repos/xca/artifacts/staking.wasm", inj_wallet, inj)
 
 ################################################
 # configs
@@ -401,3 +405,30 @@ vote_result = execute_msg(terra_cw3_address, {"vote":{"proposal_id":proposal_id,
 execute_result = execute_msg(terra_cw3_address, {"execute":{"proposal_id":proposal_id}}, wallet2, terra)
 """
 
+################################################
+# staking init
+################################################
+
+
+#create registry on terra
+init_staking_terra = {
+  "denom_name": "uluna",
+}
+
+init_result = init_contract(terra_staking_id, init_staking_terra, wallet, terra, "terra_staking")
+terra_staking_address= init_result.logs[0].events_by_type["instantiate"]["_contract_address"][0]
+
+coinz = Coins.from_str("1000000uluna");
+execute_msg(terra_staking_address, {"stake":{}}, wallet, terra, coinz)
+
+
+#create registry on inj
+init_staking_inj = {
+  "denom_name": "inj",
+}
+
+init_result = inj_init_contract(inj_staking_id, init_staking_inj, inj_wallet, inj, "inj_staking")
+inj_staking_address = init_result.logs[0].events_by_type["instantiate"]["_contract_address"][0]
+
+coinz = Coins.from_str("69inj");
+inj_execute_msg(inj_staking_address, {"stake":{}}, inj_wallet, inj, coinz)
