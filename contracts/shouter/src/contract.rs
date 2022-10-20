@@ -1,5 +1,5 @@
 use cosmwasm_std::{
-    entry_point, DepsMut, Env, MessageInfo, Response, StdResult, ContractResult, Deps, to_vec, StdError, SystemResult, to_binary, Binary, WasmQuery, QueryRequest
+    entry_point, DepsMut, Env, MessageInfo, Response, StdResult, ContractResult, Deps, to_vec, StdError, SystemResult, to_binary, Binary, WasmQuery, QueryRequest, WasmMsg, CosmosMsg
 };
 
 use injective_cosmwasm::{InjectiveQuerier, InjectiveQueryWrapper};
@@ -35,9 +35,21 @@ pub fn execute(
             Ok(Response::new().add_message(msg))
         },
         ExecuteMsg::SubmitVaa{vaa} => {
+            let config: Config = CONFIG.load(deps.storage)?;
+
             let vaa = parse_vaa(deps.as_ref(), env.block.time.seconds(), &vaa)?;
             let message: ShouterMessage = ShouterMessage::deserialize(&vaa.payload)?;
-            Ok(Response::new().add_attributes(vec![("message", message.payload[0].to_string())]))
+
+            let msg_out: CosmosMsg = CosmosMsg::Wasm(WasmMsg::Execute{
+                contract_addr: config.wormhole_contract.into(),
+                funds: vec![],
+                msg: to_binary(&WormholeExecuteMsg::PostMessage{
+                    message: to_binary(&69u32)?,
+                    nonce: 420u32,
+                })?,
+            });
+
+            Ok(Response::new().add_attributes(vec![("message", message.payload[0].to_string())]).add_message(msg_out))
         },
     }
 }

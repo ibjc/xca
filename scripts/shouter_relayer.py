@@ -33,8 +33,10 @@ from ecdsa import SECP256k1, SigningKey
 from ecdsa.util import sigencode_string_canonize
 import hashlib
 
+from web3 import Web3
+
 ################################################
-# terra objects
+# inj objects
 ################################################
 
 class AsyncInjAPI(BaseAsyncAPI):
@@ -75,6 +77,21 @@ class InjKey(MnemonicKey):
 nuhmonik = "differ flight humble cry abandon inherit noodle blood sister potato there denial woman sword divide funny trash empty novel odor churn grid easy pelican"
 wallet = inj.wallet(InjKey(mnemonic=nuhmonik, coin_type=60))
 
+################################################
+# evm objects
+################################################
+
+rpc_url = "https://goerli-light.eth.linkpool.io/"
+w3 = Web3(Web3.HTTPProvider(rpc_url))
+evm_wallet = ""
+private_key = ""
+
+nonce = w3.eth.getTransactionCount(evm_wallet)
+
+evm_shouter_abi = ""
+evm_shouter_object = w3.eth.contract(abi=evm_shouter_abi)
+
+evm_shouter_object.functions.shout().call()
 
 
 ################################################
@@ -243,71 +260,44 @@ def stargate_msg(type_url, msg, wallet, terra):
   return tx_result
 
 
-################################################
-# deploy code id
-################################################
-
-wormhole_code_id = deploy_local_wasm("/repos/xca/artifacts/smart_wallet.wasm", wallet, inj)
-
-msg_runner_id = deploy_local_wasm("/repos/xca/artifacts/zodiac_msg_runner.wasm", wallet, inj)
-
-shouter_id = deploy_local_wasm("/repos/xca/artifacts/shouter.wasm", wallet, inj)
 
 ################################################
 # hardcoded contracts
 ################################################
 
-wormhole_contract = "inj1xx3aupmgv3ce537c0yce8zzd3sz567syuyedpg"
+inj_shouter_contract = "inj1yttpsl9p3gfj7h96kn3yvkn9nlsn95w2t4vhdr"
+inj_shouter_contract_standardized = "00000000000000000000000022d6187ca18a132f5cbab4e2465a659fe132d1ca"
+inj_shouter_sequence = 1
+
+
+evm_shouter_contract = "0x69f88E9166C196be3A983c8E72D4a9f8eCb3a8b4"
+evm_shouter_contract_standardized = "00000000000000000000000069f88e9166c196be3a983c8e72d4a9f8ecb3a8b4"
+evm_shouter_sequence = 2
+
+base_url = "https://wormhole-v2-testnet-api.certus.one/v1/signed_vaa/"
 
 ################################################
-# setup msg_runner
+# main loop
 ################################################
 
-init_result = init_contract(shouter_id, {"wormhole_contract": wormhole_contract}, wallet, inj, "shouter")
-shouter_address = init_result.logs[0].events_by_type["instantiate"]["_contract_address"][0]
+while True:
 
-#fetch injective markets
-markets = inj.inj.query("/injective/exchange/v1beta1/spot/markets")
-derivatives = inj.inj.query("/injective/exchange/v1beta1/derivative/markets")
+  time.sleep(2)
 
-#query spot and top of book
-inj.wasm.contract_query(shouter_address, {"spot_market_mid_price_and_tob":{"market_id":markets["markets"][0]["market_id"]}})
+  to_inj_vaa_resp = requests.get(f"{base_url}2/{evm_shouter_contract_standardized}/{evm_shouter_sequence}")
 
-inj.wasm.contract_query(shouter_address, {"derivative_market_mid_price_and_tob":{"market_id":derivatives["markets"][0]["market"]["market_id"]}})
+  if to_inj_vaa_resp.status_code == 200:
+    #relay to injective
 
+    execute_msg(inj_shouter_contract, {"submit_vaa":{"vaa": to_inj_vaa_resp.json()["vaaBytes"]}}, wallet, inj)
 
-#create cw20 on inj example
-init_cw20 = {
-  "name": "test coin",
-  "symbol": "TEST",
-  "decimals": 6,
-  "initial_balances":[
-    {
-      "address": wallet.key.acc_address,
-      "amount": "10000000000000000",
-    },
-  ],
-  "mint":{
-    "minter": wallet.key.acc_address,
-  }
-}
+    print(f"relaying to inj: {to_inj_vaa_resp.text}")
+    continue
 
-init_result = init_contract("63", init_cw20, wallet, inj, "testcoin")
-testcoin_address = init_result.logs[0].events_by_type["instantiate"]["_contract_address"][0]
+  to_evm_vaa_resp = requests.get(f"{base_url}19/{inj_shouter_contract_standardized}/{inj_shouter_sequence}")
 
+  if to_evm_vaa_resp.status_code == 200:
+    #relay to injective
 
-################################################
-# setup shouter
-################################################
-
-init_result = init_contract(shouter_id, {}, wallet, inj, "shouter")
-shouter_address = init_result.logs[0].events_by_type["instantiate"]["_contract_address"][0]
-
-
-execute_msg(shouter_address, {"submit_vaa":{ "vaa": to_binary({"shout": "out"})}}, wallet, inj)
-
-
-################################################
-# dispatch vaa
-################################################
-execute_msg(wormhole_contract, {"post_message": {"message": to_binary({"foo": "bar"}), "nonce": 1}}, wallet, inj)
+    print(f"relaying to evm: {to_evm_vaa_resp.text}")
+    continue
