@@ -6,6 +6,7 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 use xca::account::Config;
 use xca::messages::{AccountInfo, WormholeMessage};
+use xca::registry::{ConfigResponse as RegistryConfigResponse, QueryMsg as RegistryQueryMsg};
 use xca::request::Request;
 
 use crate::error::ContractError;
@@ -28,6 +29,7 @@ pub fn instantiate(
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
     // TODO gate access for who can instantiate
     // TODO validate addrs
+    deps.api.addr_validate(&msg.x_chain_registry_address)?;
     CONFIG.save(
         deps.storage,
         &Config {
@@ -90,7 +92,13 @@ pub fn execute_call(
     is_response_expected: Option<bool>,
     execution_dependency: Option<WormholeMessage>,
 ) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
     // query registry
+    let registry_addr = deps.api.addr_validate(&config.x_chain_registry)?;
+    let res: RegistryConfigResponse = deps
+        .querier
+        .query_wasm_smart(registry_addr, &RegistryQueryMsg::Config {})?;
+
     // registry config has wormhole address
 
     // send call to other chain's xaccount
@@ -98,11 +106,11 @@ pub fn execute_call(
     // pub admin: AccountInfo,         // Can update Config. (chain, addr)
     // pub master: AccountInfo,        // Can accept VAA executions from these. (chain, addr)
     // pub slave: Option<AccountInfo>, //
-    let config = CONFIG.load(deps.storage)?;
+
     let mut submessages = Vec::new();
     submessages.push(SubMsg::reply_on_success(
         CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: wormhole_contract,
+            contract_addr: res.wormhole_core_contract,
             msg,
             funds: vec![],
         }),
