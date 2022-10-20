@@ -8,3 +8,4 @@ pub mod messages;
 pub mod request;
 pub mod wormhole;
 pub mod registry;
+pub mod staking;
