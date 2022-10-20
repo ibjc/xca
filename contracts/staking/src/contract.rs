@@ -1,9 +1,9 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128, StdError};
+use cosmwasm_std::{Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128, StdError, Coin, BankMsg, CosmosMsg, to_binary};
 // use cw2::set_contract_version;
 
-use xca::staking::{ExecuteMsg, InstantiateMsg, QueryMsg};
+use xca::staking::{ExecuteMsg, InstantiateMsg, QueryMsg, ConfigResponse, StateResponse};
 use crate::state::{Config, CONFIG, State, STATE, STAKERS};
 
 /*
@@ -69,17 +69,50 @@ pub fn execute(
         },
         ExecuteMsg::Unstake{} => {
 
-            let mut config: Config = CONFIG.load(deps.storage)?;
+            let config: Config = CONFIG.load(deps.storage)?;
 
+            //fetch sender amount
+            let staker_amount: Uint128 = STAKERS
+                .may_load(deps.storage, &info.sender.clone())?
+                .unwrap_or(Uint128::zero());
+
+            //fabricate bank send
+            let send_msg: CosmosMsg = CosmosMsg::Bank(BankMsg::Send{
+                to_address: info.sender.clone().into(),
+                amount: vec![
+                    Coin{
+                        denom: config.denom_name,
+                        amount: staker_amount,
+                    }
+                ],
+            });
             
-            Ok(Response::new())
+            //exit and dispatch
+            
+            Ok(Response::new().add_message(send_msg))
         },
     }
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn query(_deps: Deps, _env: Env, _msg: QueryMsg) -> StdResult<Binary> {
-    unimplemented!()
+pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
+    match msg{
+        QueryMsg::Config {} => {
+            let config: Config = CONFIG.load(deps.storage)?;
+    
+            Ok(to_binary(&ConfigResponse{
+                denom_name: config.denom_name,
+            })?)
+        },
+
+        QueryMsg::State{} => {
+            let state: State = STATE.load(deps.storage)?;
+    
+            Ok(to_binary(&StateResponse{
+                total_staked: state.total_staked,
+            })?)
+        }
+    }
 }
 
 #[cfg(test)]
