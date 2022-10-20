@@ -1,11 +1,14 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdResult, SubMsg, WasmMsg,
+    to_binary, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Storage,
+    SubMsg, WasmMsg,
 };
 use cw2::set_contract_version;
 use xca::account::Config;
-use xca::messages::{AccountInfo, WormholeMessage};
+use xca::byte_utils::ByteUtils;
+use xca::error::ContractError as XcaContractError;
+use xca::messages::{AccountInfo, ParsedVAA, WormholeMessage};
 use xca::registry::{ConfigResponse as RegistryConfigResponse, QueryMsg as RegistryQueryMsg};
 use xca::request::Request;
 
@@ -163,8 +166,94 @@ pub fn execute_update_config(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn query(_deps: Deps, _env: Env, _msg: QueryMsg) -> StdResult<Binary> {
-    unimplemented!()
+pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
+    match msg {
+        QueryMsg::VerifyVAA { vaa, block_time } => to_binary(&query_parse_and_verify_vaa(
+            deps,
+            vaa.as_slice(),
+            block_time,
+        )?),
+    }
+}
+
+pub fn query_parse_and_verify_vaa(
+    deps: Deps,
+    data: &[u8],
+    block_time: u64,
+) -> StdResult<ParsedVAA> {
+    Ok(parse_and_verify_vaa(deps.storage, data, block_time)?)
+}
+
+/// taken from https://github.com/wormhole-foundation/wormhole/blob/dev.v2/cosmwasm/contracts/wormhole/src/contract.rs
+/// Parses raw VAA data into a struct and verifies whether it contains sufficient signatures of an
+/// active guardian set i.e. is valid according to Wormhole consensus rules
+fn parse_and_verify_vaa(
+    storage: &dyn Storage,
+    data: &[u8],
+    block_time: u64,
+) -> StdResult<ParsedVAA> {
+    let vaa = ParsedVAA::deserialize(data)?;
+
+    if vaa.version != 1 {
+        return XcaContractError::InvalidVersion.std_err();
+    }
+
+    // Check if VAA with this hash was already accepted
+    if vaa_archive_check(storage, vaa.hash.as_slice()) {
+        return XcaContractError::VaaAlreadyExecuted.std_err();
+    }
+
+    // Load and check guardian set
+    let guardian_set = guardian_set_get(storage, vaa.guardian_set_index);
+    let guardian_set: xca::wormhole::WormholeQueryMsg =
+        guardian_set.or_else(|_| XcaContractError::InvalidGuardianSetIndex.std_err())?;
+
+    if guardian_set.expiration_time != 0 && guardian_set.expiration_time < block_time {
+        return XcaContractError::GuardianSetExpired.std_err();
+    }
+    if (vaa.len_signers as usize) < guardian_set.quorum() {
+        return XcaContractError::NoQuorum.std_err();
+    }
+
+    // Verify guardian signatures
+    let mut last_index: i32 = -1;
+    let mut pos = ParsedVAA::HEADER_LEN;
+
+    for _ in 0..vaa.len_signers {
+        if pos + ParsedVAA::SIGNATURE_LEN > data.len() {
+            return XcaContractError::InvalidVAA.std_err();
+        }
+        let index = data.get_u8(pos) as i32;
+        if index <= last_index {
+            return XcaContractError::WrongGuardianIndexOrder.std_err();
+        }
+        last_index = index;
+
+        let signature = Signature::try_from(
+            &data[pos + ParsedVAA::SIG_DATA_POS
+                ..pos + ParsedVAA::SIG_DATA_POS + ParsedVAA::SIG_DATA_LEN],
+        )
+        .or_else(|_| ContractError::CannotDecodeSignature.std_err())?;
+        let id = RecoverableId::new(data.get_u8(pos + ParsedVAA::SIG_RECOVERY_POS))
+            .or_else(|_| XcaContractError::CannotDecodeSignature.std_err())?;
+        let recoverable_signature = RecoverableSignature::new(&signature, id)
+            .or_else(|_| XcaContractError::CannotDecodeSignature.std_err())?;
+
+        let verify_key = recoverable_signature
+            .recover_verify_key_from_digest_bytes(GenericArray::from_slice(vaa.hash.as_slice()))
+            .or_else(|_| XcaContractError::CannotRecoverKey.std_err())?;
+
+        let index = index as usize;
+        if index >= guardian_set.addresses.len() {
+            return XcaContractError::TooManySignatures.std_err();
+        }
+        if !keys_equal(&verify_key, &guardian_set.addresses[index]) {
+            return XcaContractError::GuardianSignatureError.std_err();
+        }
+        pos += ParsedVAA::SIGNATURE_LEN;
+    }
+
+    Ok(vaa)
 }
 
 #[cfg(test)]

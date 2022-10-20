@@ -38,4 +38,10 @@ pub enum ExecuteMsg {
 
 #[cw_serde]
 #[derive(QueryResponses)]
-pub enum QueryMsg {}
+pub enum QueryMsg {
+    #[returns(ParsedVAA)]
+    VerifyVAA { vaa: Binary, block_time: u64 },
+}
+
+#[cw_serde]
+pub struct VerifyResponse {}
