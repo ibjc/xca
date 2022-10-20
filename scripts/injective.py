@@ -263,9 +263,6 @@ wormhole_contract = "inj1xx3aupmgv3ce537c0yce8zzd3sz567syuyedpg"
 # setup msg_runner
 ################################################
 
-init_result = init_contract(shouter_id, {"wormhole_contract": wormhole_contract}, wallet, inj, "shouter")
-shouter_address = init_result.logs[0].events_by_type["instantiate"]["_contract_address"][0]
-
 #fetch injective markets
 markets = inj.inj.query("/injective/exchange/v1beta1/spot/markets")
 derivatives = inj.inj.query("/injective/exchange/v1beta1/derivative/markets")
@@ -300,7 +297,7 @@ testcoin_address = init_result.logs[0].events_by_type["instantiate"]["_contract_
 # setup shouter
 ################################################
 
-init_result = init_contract(shouter_id, {}, wallet, inj, "shouter")
+init_result = init_contract(shouter_id, {"wormhole_contract": wormhole_contract}, wallet, inj, "shouter")
 shouter_address = init_result.logs[0].events_by_type["instantiate"]["_contract_address"][0]
 
 

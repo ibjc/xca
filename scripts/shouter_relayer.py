@@ -265,8 +265,8 @@ def stargate_msg(type_url, msg, wallet, terra):
 # hardcoded contracts
 ################################################
 
-inj_shouter_contract = "inj1yttpsl9p3gfj7h96kn3yvkn9nlsn95w2t4vhdr"
-inj_shouter_contract_standardized = "00000000000000000000000022d6187ca18a132f5cbab4e2465a659fe132d1ca"
+inj_shouter_contract = "inj188xz8cg4uqk4ssg9tcf3q2764ar8ev0ju4jper"
+inj_shouter_contract_standardized = "00000000000000000000000039cc23e115e02d5841055e13102bdaaf467cb1f2"
 inj_shouter_sequence = 1
 
 
