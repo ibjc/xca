@@ -40,7 +40,7 @@ pub enum ExecuteMsg {
 #[derive(QueryResponses)]
 pub enum QueryMsg {
     #[returns(ParsedVAA)]
-    VerifyVAA { vaa: Binary, block_time: u64 },
+    VerifyVAA { vaa: Binary },
 }
 
 #[cw_serde]
