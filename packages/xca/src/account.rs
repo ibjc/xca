@@ -37,6 +37,12 @@ pub enum ExecuteMsg{
   FinishCall {
     vaas: Vec<Binary> 
   },
+  UpdateConfig{
+    x_chain_registry: String,
+    admin: AccountInfo,
+    master: AccountInfo,
+    slave: Option<AccountInfo>,
+  }
 }
 
 #[cw_serde]

@@ -8,7 +8,7 @@ use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
 
 /*
 // version info for migration info
-const CONTRACT_NAME: &str = "crates.io:staking";
+const CONTRACT_NAME: &str = "crates.io:registry";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 */
 

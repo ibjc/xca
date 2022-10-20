@@ -1,6 +1,6 @@
 use cosmwasm_schema::write_api;
 
-use multisig::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
+use registry::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
 
 fn main() {
     write_api! {
