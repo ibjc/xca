@@ -42,6 +42,11 @@ terra = LCDClient(url="https://pisco-lcd.terra.dev/", chain_id="pisco-1")
 nuhmonik = " ".join(["zebra" for x in range(24)])
 wallet = terra.wallet(MnemonicKey(mnemonic=nuhmonik))
 
+nuhmonik1 = " ".join(["rifle" for x in range(24)])
+wallet1 = terra.wallet(MnemonicKey(mnemonic=nuhmonik1))
+
+nuhmonik2 = " ".join(["differ" for x in range(24)])
+wallet2 = terra.wallet(MnemonicKey(mnemonic=nuhmonik2))
 
 ################################################
 # inj objects
@@ -85,6 +90,11 @@ class InjKey(MnemonicKey):
 nuhmonik = "differ flight humble cry abandon inherit noodle blood sister potato there denial woman sword divide funny trash empty novel odor churn grid easy pelican"
 inj_wallet = inj.wallet(InjKey(mnemonic=nuhmonik, coin_type=60))
 
+nuhmonik1 = " ".join(["rifle" for x in range(24)])
+inj_wallet1 = inj.wallet(InjKey(mnemonic=nuhmonik1, coin_type=60))
+
+nuhmonik2 = " ".join(["differ" for x in range(24)])
+inj_wallet2 = inj.wallet(InjKey(mnemonic=nuhmonik2, coin_type=60))
 
 
 ################################################
@@ -265,9 +275,13 @@ def inj_bank_msg_send(recipient, amount, wallet, inj):
 terra_registry_id = deploy_local_wasm("/repos/xca/artifacts/registry.wasm", wallet, terra)
 terra_account_id = "69"
 
+terra_multisig_code_id = deploy_local_wasm("/repos/cw-plus/artifacts/cw3_fixed_multisig.wasm", wallet, terra)
+
 #inj-side
 inj_registry_id = inj_deploy_local_wasm("/repos/xca/artifacts/registry.wasm", inj_wallet, inj)
 inj_account_id = "69"
+
+inj_multisig_code_id = inj_deploy_local_wasm("/repos/cw-plus/artifacts/cw3_fixed_multisig.wasm", inj_wallet, inj)
 
 ################################################
 # configs
@@ -324,3 +338,66 @@ init_registry_inj = {
 
 init_result = inj_init_contract(inj_registry_id, init_registry_inj, inj_wallet, inj, "inj_registry")
 inj_registry_address = init_result.logs[0].events_by_type["instantiate"]["_contract_address"][0]
+
+
+
+################################################
+# cw3 deploy
+################################################
+
+
+init_msg = {
+  "max_voting_period": {"height": 100},
+  "threshold": {
+    "absolute_count" : {"weight": 2},
+  },
+  "voters":[
+    {"addr": wallet1.key.acc_address, "weight": 1},
+    {"addr": wallet2.key.acc_address, "weight": 1},
+    {"addr": wallet.key.acc_address, "weight": 1},
+  ]
+}
+
+cw3_result = init_contract(terra_multisig_code_id, init_msg, wallet, terra, "terra_cw3")
+terra_cw3_address = cw3_result.logs[0].events_by_type["instantiate"]["_contract_address"][0]
+
+
+init_msg = {
+  "max_voting_period": {"height": 100},
+  "threshold": {
+    "absolute_count" : {"weight": 2},
+  },
+  "voters":[
+    {"addr": inj_wallet1.key.acc_address, "weight": 1},
+    {"addr": inj_wallet2.key.acc_address, "weight": 1},
+    {"addr": inj_wallet.key.acc_address, "weight": 1},
+  ]
+}
+
+cw3_result = inj_init_contract(inj_multisig_code_id, init_msg, inj_wallet, inj, "inj_cw3")
+inj_cw3_address = cw3_result.logs[0].events_by_type["instantiate"]["_contract_address"][0]
+
+
+"""
+################################################
+# make, vote, execute proposal
+################################################
+
+message = {
+  "propose":{
+    "title": "test",
+    "description": "test69",
+    "msgs":[
+      {"bank": {"send":{"to_address": worker_wallet.key.acc_address, "amount":[{"denom":"uusd", "amount":"69000000"}]}}}
+    ]
+  }
+}
+
+result = execute_msg(terra_cw3_address, message, wallet, terra)
+proposal_id = int(result.logs[0].events_by_type["wasm"]["proposal_id"][0])
+
+vote_result = execute_msg(terra_cw3_address, {"vote":{"proposal_id":proposal_id, "vote": "yes"}}, wallet1, terra)
+
+execute_result = execute_msg(terra_cw3_address, {"execute":{"proposal_id":proposal_id}}, wallet2, terra)
+"""
+
