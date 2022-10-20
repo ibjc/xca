@@ -1,6 +1,8 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
+use cosmwasm_std::{
+    Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdResult, SubMsg, WasmMsg,
+};
 use cw2::set_contract_version;
 use xca::account::Config;
 use xca::messages::{AccountInfo, WormholeMessage};
@@ -14,15 +16,18 @@ use crate::state::CONFIG;
 const CONTRACT_NAME: &str = "crates.io:account";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+const POST_REPLY_ID: u64 = 1;
+
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
-    env: Env,
-    info: MessageInfo,
+    _env: Env,
+    _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
-
+    // TODO gate access for who can instantiate
+    // TODO validate addrs
     CONFIG.save(
         deps.storage,
         &Config {
@@ -85,7 +90,26 @@ pub fn execute_call(
     is_response_expected: Option<bool>,
     execution_dependency: Option<WormholeMessage>,
 ) -> Result<Response, ContractError> {
-    Ok(Response::new())
+    // query registry
+    // registry config has wormhole address
+
+    // send call to other chain's xaccount
+    // pub x_chain_registry: String,   // Updatable by admins
+    // pub admin: AccountInfo,         // Can update Config. (chain, addr)
+    // pub master: AccountInfo,        // Can accept VAA executions from these. (chain, addr)
+    // pub slave: Option<AccountInfo>, //
+    let config = CONFIG.load(deps.storage)?;
+    let mut submessages = Vec::new();
+    submessages.push(SubMsg::reply_on_success(
+        CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: wormhole_contract,
+            msg,
+            funds: vec![],
+        }),
+        POST_REPLY_ID,
+    ));
+
+    Ok(Response::new().add_submessages(submessages))
 }
 
 pub fn execute_broadcast_call(
@@ -112,6 +136,21 @@ pub fn execute_update_config(
     master: AccountInfo,
     slave: Option<AccountInfo>,
 ) -> Result<Response, ContractError> {
+    // TODO gate access
+    // if config.admin.address != info.sender {
+    //     return Err(ContractError::Unauthorized {});
+    // }
+
+    // TODO sanitize and validate user input values
+    CONFIG.save(
+        deps.storage,
+        &Config {
+            x_chain_registry,
+            admin,
+            master,
+            slave,
+        },
+    )?;
     Ok(Response::new())
 }
 
