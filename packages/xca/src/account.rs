@@ -5,10 +5,10 @@ use cosmwasm_std::Binary;
 
 #[cw_serde]
 pub struct Config {
-    x_chain_registry: String,   // Updatable by admins
-    admin: AccountInfo,         // Can update Config. (chain, addr)
-    master: AccountInfo,        // Can accept VAA executions from these. (chain, addr)
-    slave: Option<AccountInfo>, //
+    pub x_chain_registry: String,   // Updatable by admins
+    pub admin: AccountInfo,         // Can update Config. (chain, addr)
+    pub master: AccountInfo,        // Can accept VAA executions from these. (chain, addr)
+    pub slave: Option<AccountInfo>, //
 }
 
 #[cw_serde]

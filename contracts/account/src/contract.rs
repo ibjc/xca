@@ -3,6 +3,8 @@ use cosmwasm_std::entry_point;
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
 use cw2::set_contract_version;
 use xca::account::Config;
+use xca::messages::{AccountInfo, WormholeMessage};
+use xca::request::Request;
 
 use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
@@ -39,17 +41,78 @@ pub fn instantiate(
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(
-    _deps: DepsMut,
+    deps: DepsMut,
     _env: Env,
-    _info: MessageInfo,
-    _msg: ExecuteMsg,
+    info: MessageInfo,
+    msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::Call { .. } => Ok(Response::new()),
-        ExecuteMsg::BroadcastCall { .. } => Ok(Response::new()),
-        ExecuteMsg::FinishCall { .. } => Ok(Response::new()),
-        ExecuteMsg::UpdateConfig { .. } => Ok(Response::new()),
+        ExecuteMsg::Call {
+            msg_type,       // e.g. ExecuteMsg, QueryMsg, InstatiateMsg, MigrateMsg. null => ExecuteMsg
+            msg,            // base64-encoded stringified JSON
+            destination,    // address registry required
+            receive_caller, // optional general relayer usage
+            is_response_expected, // give back Ok(x => VAA)
+            execution_dependency, // wormhole_message.sequence here
+        } => execute_call(
+            deps,
+            info,
+            msg_type,
+            msg,
+            destination,
+            receive_caller,
+            is_response_expected,
+            execution_dependency,
+        ),
+        ExecuteMsg::BroadcastCall { request } => execute_broadcast_call(deps, info, request),
+        ExecuteMsg::FinishCall { vaas } => execute_finish_call(deps, info, vaas),
+        ExecuteMsg::UpdateConfig {
+            x_chain_registry,
+            admin,
+            master,
+            slave,
+        } => execute_update_config(deps, info, x_chain_registry, admin, master, slave),
     }
+}
+
+pub fn execute_call(
+    deps: DepsMut,
+    info: MessageInfo,
+    msg_type: Option<String>,
+    msg: Binary,
+    destination: AccountInfo,
+    receive_caller: Option<String>,
+    is_response_expected: Option<bool>,
+    execution_dependency: Option<WormholeMessage>,
+) -> Result<Response, ContractError> {
+    Ok(Response::new())
+}
+
+pub fn execute_broadcast_call(
+    deps: DepsMut,
+    info: MessageInfo,
+    request: Request,
+) -> Result<Response, ContractError> {
+    Ok(Response::new())
+}
+
+pub fn execute_finish_call(
+    deps: DepsMut,
+    info: MessageInfo,
+    vaas: Vec<Binary>,
+) -> Result<Response, ContractError> {
+    Ok(Response::new())
+}
+
+pub fn execute_update_config(
+    deps: DepsMut,
+    info: MessageInfo,
+    x_chain_registry: String,
+    admin: AccountInfo,
+    master: AccountInfo,
+    slave: Option<AccountInfo>,
+) -> Result<Response, ContractError> {
+    Ok(Response::new())
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
