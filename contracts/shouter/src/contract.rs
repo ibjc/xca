@@ -4,7 +4,7 @@ use cosmwasm_std::{
 
 use injective_cosmwasm::{InjectiveQuerier, InjectiveQueryWrapper};
 use crate::state::{ShouterMessage, Config, CONFIG};
-use xca::wormhole::{WormholeExecuteMsg, WormholeQueryMsg, ParsedVAA, AccountInfo};
+use xca::wormhole::{WormholeExecuteMsg, WormholeQueryMsg, ParsedVAA};
 
 use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
 
@@ -44,7 +44,7 @@ pub fn execute(
                 contract_addr: config.wormhole_contract.into(),
                 funds: vec![],
                 msg: to_binary(&WormholeExecuteMsg::PostMessage{
-                    message: to_binary(&69u32)?,
+                    message: to_binary(&(6969u128>>96))?,
                     nonce: 420u32,
                 })?,
             });
@@ -98,24 +98,6 @@ pub fn query(deps: Deps<InjectiveQueryWrapper>, _env: Env, msg: QueryMsg) -> Std
         //QueryMsg::OracleVolatility {base_info,quote_info,oracle_history_options} => Ok(to_binary(&querier.query_oracle_volatility(base_info, quote_info, oracle_history_options)?)?),
 
     }
-}
-
-fn parse_and_archive_vaa(
-    deps: DepsMut,
-    env: Env,
-    data: &Binary,
-) -> StdResult<(ParsedVAA, ShouterMessage)> {
-    let vaa = parse_vaa(deps.as_ref(), env.block.time.seconds(), data)?;
-
-    /*
-    if !VAA_ARCHIVE.may_load(deps.storage, vaa.hash.as_slice())?.unwrap_or(false) {
-        return Err(StdError::generic_err("VAA already executed"));
-    }
-    VAA_ARCHIVE.save(deps.storage, vaa.hash.as_slice(), &true)?;
-    */
-
-    let message = ShouterMessage::deserialize(&vaa.payload)?;
-    Ok((vaa, message))
 }
 
 

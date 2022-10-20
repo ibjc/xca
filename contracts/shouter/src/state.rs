@@ -1,9 +1,8 @@
-use cosmwasm_std::{Addr, StdResult, Binary};
+use cosmwasm_std::{Addr, StdResult};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cw_storage_plus::{Item, Map};
-use xca::wormhole::AccountInfo;
 
 pub const CONFIG: Item<Config> = Item::new("\u{0}\u{6}config");
 pub const VAA_ARCHIVE: Map<&[u8], bool> = Map::new("vaa_archive");
