@@ -44,7 +44,7 @@ pub fn execute(
                 contract_addr: config.wormhole_contract.into(),
                 funds: vec![],
                 msg: to_binary(&WormholeExecuteMsg::PostMessage{
-                    message: to_binary(&(6969u128>>96))?,
+                    message: to_binary(&(6969u128<<96))?,
                     nonce: 420u32,
                 })?,
             });

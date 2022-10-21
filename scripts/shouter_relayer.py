@@ -265,14 +265,14 @@ def stargate_msg(type_url, msg, wallet, terra):
 # hardcoded contracts
 ################################################
 
-inj_shouter_contract = "inj188xz8cg4uqk4ssg9tcf3q2764ar8ev0ju4jper"
-inj_shouter_contract_standardized = "00000000000000000000000039cc23e115e02d5841055e13102bdaaf467cb1f2"
-inj_shouter_sequence = 1
+inj_shouter_contract = "inj15z27fw0l4f6u3wwgs3efhfkdzmf97l065tzz6p"
+inj_shouter_contract_standardized = "000000000000000000000000a095e4b9ffaa75c8b9c884729ba6cd16d25f7dfa"
+inj_shouter_sequence = 0
 
 
-evm_shouter_contract = "0x69f88E9166C196be3A983c8E72D4a9f8eCb3a8b4"
-evm_shouter_contract_standardized = "00000000000000000000000069f88e9166c196be3a983c8e72d4a9f8ecb3a8b4"
-evm_shouter_sequence = 2
+evm_shouter_contract = "0xd50114d5Faa64024DF4588ac712D98D222b5e17B"
+evm_shouter_contract_standardized = "000000000000000000000000d50114d5Faa64024DF4588ac712D98D222b5e17B"
+evm_shouter_sequence = 0
 
 base_url = "https://wormhole-v2-testnet-api.certus.one/v1/signed_vaa/"
 
@@ -291,6 +291,8 @@ while True:
 
     execute_msg(inj_shouter_contract, {"submit_vaa":{"vaa": to_inj_vaa_resp.json()["vaaBytes"]}}, wallet, inj)
 
+    evm_shouter_sequence += 1
+
     print(f"relaying to inj: {to_inj_vaa_resp.text}")
     continue
 
@@ -298,6 +300,8 @@ while True:
 
   if to_evm_vaa_resp.status_code == 200:
     #relay to injective
+
+    inj_shouter_sequence += 1
 
     print(f"relaying to evm: {to_evm_vaa_resp.text}")
     continue
