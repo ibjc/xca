@@ -1,44 +1,64 @@
-use crate::error::*;
 use crate::{
     byte_utils::{extend_address_to_32, ByteUtils},
     error::ContractError,
 };
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::StdResult;
+use cosmwasm_std::{Binary, StdResult};
 use sha3::{Digest, Keccak256};
 
 #[cw_serde]
-pub struct WormholeMessage {
-    // values optional if used for execution dependency settings
-    message: Option<Message>,
-    sender: String,               // msg.sender of request
-    emitter: Option<AccountInfo>, // emitter of VAA
-    sequence: Option<u64>,
-    is_response_expected: bool, // 1: receiver should send back response, otherwise abort
-    is_executable: bool,        // 1: payload must be executed post-receival, otherwise abort
-    execution_dependency: Option<Box<WormholeMessage>>, //DAG-like message execution dependencies
+pub struct Envelope {
+
+    pub id: Option<RequestInfo>,
+    pub sender: Option<AccountInfo>,
+    pub emitter: Option<AccountInfo>,
+    pub nonce: Option<u32>,
+    pub consistency_level: Option<u8>,
+
+    pub destination_chain: Option<Vec<u8>>,
+    pub destination_address: Option<Vec<String>>,
+
+    pub is_response_expected: bool,
+    pub is_executable: bool,
+    pub execution_dependency: Option<RequestId>,
+
+    pub caller: Option<String>,
+
+    pub response_of: Option<RequestId>,
+
 }
 
 #[cw_serde]
-pub struct Message {
-    nonce: Option<u32>,
-    consistency_level: Option<u8>,
-    payload: Vec<u8>,
+pub struct Request{
+    pub envelope: Envelope,
+    pub payload: Binary,
+    pub status: RequestStatus,
+    pub response: Option<RequestId>,
 }
 
 #[cw_serde]
-pub struct AccountInfo {
-    pub chain_id: u64, //wormhole chainid
+pub struct RequestId{
+    pub chain_id: u64,
+    pub sequence: u64,
+}
+
+#[cw_serde]
+pub struct RequestInfo {
+	pub status: RequestStatus, 
+	pub x_account: AccountInfo // used if a xAccount pair is being deployed. Stores the newly deployed xAccount of chain_id_here 
+}
+
+#[cw_serde]
+pub struct AccountInfo{
+    pub chain_id: u64,
     pub address: String,
-    // pub is_emitter: u8, //1 emitter, 0 receiver
-
-    //TODO: accountinfo"s" version w/ vec of <accountinfo>
 }
 
 #[cw_serde]
-pub struct WormholeResponse {
-    vaa_details: ParsedVAA,
-    wormhole_message: WormholeMessage,
+pub enum RequestStatus{
+    Pending,
+    Complete,
+    Failed
 }
 
 // Validator Action Approval(VAA) data
@@ -149,11 +169,4 @@ impl ParsedVAA {
             hash,
         })
     }
-}
-
-#[cw_serde]
-pub enum RequestStatus {
-    Pending,  // VAA transmission is currently in way
-    Complete, // Response is given or payload is sent without expecting response
-    Failed,   // Response given as failed
 }

@@ -1,9 +1,9 @@
 use cosmwasm_std::{
-    entry_point, DepsMut, Env, MessageInfo, Response, StdResult, ContractResult, Deps, to_vec, StdError, SystemResult, to_binary, Binary, WasmQuery, QueryRequest, WasmMsg, CosmosMsg
+    entry_point, DepsMut, Env, MessageInfo, Response, StdResult, ContractResult, Deps, to_vec, StdError, SystemResult, to_binary, Binary, WasmQuery, QueryRequest, WasmMsg, CosmosMsg, Uint128
 };
 
 use injective_cosmwasm::{InjectiveQuerier, InjectiveQueryWrapper};
-use crate::state::{ShouterMessage, Config, CONFIG};
+use crate::state::{ShouterMessage, Config, CONFIG, ShoutBackMessage};
 use xca::wormhole::{WormholeExecuteMsg, WormholeQueryMsg, ParsedVAA};
 
 use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
@@ -38,18 +38,23 @@ pub fn execute(
             let config: Config = CONFIG.load(deps.storage)?;
 
             let vaa = parse_vaa(deps.as_ref(), env.block.time.seconds(), &vaa)?;
-            let message: ShouterMessage = ShouterMessage::deserialize(&vaa.payload)?;
+            let message_in: ShouterMessage = ShouterMessage::deserialize(&vaa.payload)?;
+
+            let message: ShoutBackMessage = ShoutBackMessage{
+                best_bid: Uint128::from(7u128<<93),
+                best_ask: Uint128::from(9u128<<93),
+            };
 
             let msg_out: CosmosMsg = CosmosMsg::Wasm(WasmMsg::Execute{
                 contract_addr: config.wormhole_contract.into(),
                 funds: vec![],
                 msg: to_binary(&WormholeExecuteMsg::PostMessage{
-                    message: to_binary(&(6969u128>>96))?,
+                    message: message.serialize().into(),
                     nonce: 420u32,
                 })?,
             });
 
-            Ok(Response::new().add_attributes(vec![("message", message.payload[0].to_string())]).add_message(msg_out))
+            Ok(Response::new().add_attributes(vec![("shout_in", message_in.payload[0].to_string()), ("best_bid", message.best_bid.to_string()), ("best_ask", message.best_ask.to_string())]).add_message(msg_out))
         },
     }
 }

@@ -1,5 +1,4 @@
-use crate::messages::{AccountInfo, WormholeMessage};
-use crate::request::Request;
+use crate::messages::{AccountInfo, Request, Envelope};
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::Binary;
 
@@ -13,21 +12,19 @@ pub struct Config {
 
 #[cw_serde]
 pub struct InstantiateMsg {
-    x_chain_registry_address: String,
-    admin: AccountInfo,
-    master: AccountInfo,
-    slave: Option<AccountInfo>,
+    pub x_chain_registry_address: String,
+    pub admin: AccountInfo,
+    pub master: AccountInfo,
+    pub slave: Option<AccountInfo>,
 }
 
 #[cw_serde]
 pub enum ExecuteMsg {
     Call {
-        msg_type: Option<String>, // e.g. ExecuteMsg, QueryMsg, InstatiateMsg, MigrateMsg. null => ExecuteMsg
-        msg: Binary,              // base64-encoded stringified JSON
-        destination: AccountInfo, // address registry required
-        receive_caller: Option<String>, // optional general relayer usage
-        is_response_expected: Option<bool>, // give back Ok(x => VAA)
-        execution_dependency: Option<WormholeMessage>, // wormhole_message.sequence here
+        outgoing_envelope: Envelope, 
+        msg_type: Option<String>, // e.g. ExecuteMsg, QueryMsg, InstatiateMsg, MigrateMsg, xData. null => ExecuteMsg
+        msg: Binary, // base64-encoded stringified JSON
+        x_data: Option<Binary>, // optional data, not used here
     },
     BroadcastCall {
         request: Request,
@@ -44,8 +41,6 @@ pub enum ExecuteMsg {
 }
 
 #[cw_serde]
-pub enum MsgType {
-    Execute,
-    Query,
-    Instantiate,
+pub enum QueryMsg{
+    Config{},
 }

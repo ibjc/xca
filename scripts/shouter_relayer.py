@@ -34,6 +34,7 @@ from ecdsa.util import sigencode_string_canonize
 import hashlib
 
 from web3 import Web3
+from web3.middleware import construct_sign_and_send_raw_middleware
 
 ################################################
 # inj objects
@@ -81,18 +82,13 @@ wallet = inj.wallet(InjKey(mnemonic=nuhmonik, coin_type=60))
 # evm objects
 ################################################
 
-rpc_url = "https://goerli-light.eth.linkpool.io/"
+rpc_url = "https://goerli.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161"
 w3 = Web3(Web3.HTTPProvider(rpc_url))
-evm_wallet = ""
-private_key = ""
+private_key = "4030670b030e97abb0c3d71b6a8a3a07bb12c56bf0f0d2a8eab8e26d1f628626"
+evm_wallet = w3.eth.account.privateKeyToAccount(private_key)
 
-nonce = w3.eth.getTransactionCount(evm_wallet)
-
-evm_shouter_abi = ""
-evm_shouter_object = w3.eth.contract(abi=evm_shouter_abi)
-
-evm_shouter_object.functions.shout().call()
-
+w3.middleware_onion.add(construct_sign_and_send_raw_middleware(evm_wallet))
+w3.eth.default_account = evm_wallet.address
 
 ################################################
 # deploy func
@@ -265,14 +261,31 @@ def stargate_msg(type_url, msg, wallet, terra):
 # hardcoded contracts
 ################################################
 
-inj_shouter_contract = "inj188xz8cg4uqk4ssg9tcf3q2764ar8ev0ju4jper"
-inj_shouter_contract_standardized = "00000000000000000000000039cc23e115e02d5841055e13102bdaaf467cb1f2"
-inj_shouter_sequence = 1
+inj_shouter_contract = "inj159fw63ffz8s9jspfr0ff3lkt3vanrjqxh59jl3"
+inj_shouter_contract_standardized = "000000000000000000000000a152ed452911e05940291bd298fecb8b3b31c806"
+inj_shouter_sequence = 0
 
 
-evm_shouter_contract = "0x69f88E9166C196be3A983c8E72D4a9f8eCb3a8b4"
-evm_shouter_contract_standardized = "00000000000000000000000069f88e9166c196be3a983c8e72d4a9f8ecb3a8b4"
-evm_shouter_sequence = 2
+evm_shouter_contract = "0x7fac7bab2e22cef65700d880fe4e7790331665f4"
+evm_shouter_contract_standardized = "0000000000000000000000007fac7bab2e22cef65700d880fe4e7790331665f4"
+evm_shouter_sequence = 0
+
+abi_dict = {}
+with open("/repos/xca/scripts/PuniswapV3Pool.json") as fp:
+  abi_dict = json.load(fp)
+
+evm_shouter_abi = abi_dict
+evm_shouter_object = w3.eth.contract(abi=evm_shouter_abi["abi"], address=Web3.toChecksumAddress(evm_shouter_contract))
+
+evm_wormhole_contract = "0x706abc4E45D419950511e474C7B9Ed348A4a716c"
+evm_wormhole_contract_standardized = "0000000000000000000000003c3d457f1522d3540ab3325aa5f1864e34cba9d0"
+
+abi_dict = {}
+with open("/repos/xca/scripts/wormhole_core.json") as fp:
+  abi_dict = json.load(fp)
+
+evm_wormhole_abi = abi_dict
+evm_wormhole_object = w3.eth.contract(abi=evm_wormhole_abi, address=Web3.toChecksumAddress(evm_wormhole_contract))
 
 base_url = "https://wormhole-v2-testnet-api.certus.one/v1/signed_vaa/"
 
@@ -290,14 +303,18 @@ while True:
     #relay to injective
 
     execute_msg(inj_shouter_contract, {"submit_vaa":{"vaa": to_inj_vaa_resp.json()["vaaBytes"]}}, wallet, inj)
+    evm_shouter_sequence += 1
 
     print(f"relaying to inj: {to_inj_vaa_resp.text}")
     continue
 
-  to_evm_vaa_resp = requests.get(f"{base_url}19/{inj_shouter_contract_standardized}/{inj_shouter_sequence}")
-
+  to_evm_vaa_resp = requests.get(f"{base_url}19/{inj_shouter_contract_standardized}/{inj_shouter_sequence}")  
+  
   if to_evm_vaa_resp.status_code == 200:
-    #relay to injective
+    #relay to goerli
+
+    evm_shouter_object.functions.receiveVAA(base64.b64decode(to_evm_vaa_resp.json()["vaaBytes"])).transact()
+    inj_shouter_sequence += 1
 
     print(f"relaying to evm: {to_evm_vaa_resp.text}")
     continue
