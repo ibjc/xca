@@ -2,19 +2,17 @@
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     to_binary, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, QueryRequest, Response,
-    StdResult, Storage, SubMsg, WasmMsg, WasmQuery,
+    StdResult, SubMsg, WasmMsg, WasmQuery, StdError,
 };
 use cw2::set_contract_version;
-use xca::account::Config;
+use xca::account::{Config, ExecuteMsg, InstantiateMsg, QueryMsg};
 use xca::byte_utils::ByteUtils;
 use xca::error::ContractError as XcaContractError;
-use xca::messages::{AccountInfo, ParsedVAA, WormholeMessage};
-use xca::registry::{ConfigResponse as RegistryConfigResponse, QueryMsg as RegistryQueryMsg};
-use xca::request::Request;
+use xca::messages::{AccountInfo, ParsedVAA, Envelope, Request};
+use xca::registry::{ChainInfo, ConfigResponse as RegistryConfigResponse, QueryMsg as RegistryQueryMsg};
 use xca::wormhole::WormholeQueryMsg;
 
 use crate::error::ContractError;
-use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
 use crate::state::CONFIG;
 
 // version info for migration info
@@ -29,7 +27,7 @@ pub fn instantiate(
     _env: Env,
     _info: MessageInfo,
     msg: InstantiateMsg,
-) -> Result<Response, ContractError> {
+) -> StdResult<Response> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
     // TODO gate access for who can instantiate
     // TODO validate addrs
@@ -56,24 +54,20 @@ pub fn execute(
     _env: Env,
     info: MessageInfo,
     msg: ExecuteMsg,
-) -> Result<Response, ContractError> {
+) -> StdResult<Response> {
     match msg {
         ExecuteMsg::Call {
-            msg_type,       // e.g. ExecuteMsg, QueryMsg, InstatiateMsg, MigrateMsg. null => ExecuteMsg
-            msg,            // base64-encoded stringified JSON
-            destination,    // address registry required
-            receive_caller, // optional general relayer usage
-            is_response_expected, // give back Ok(x => VAA)
-            execution_dependency, // wormhole_message.sequence here
+            outgoing_envelope, 
+            msg_type, // e.g. ExecuteMsg, QueryMsg, InstatiateMsg, MigrateMsg, xData. null => ExecuteMsg
+            msg, // base64-encoded stringified JSON
+            x_data, // optional data, not used here
         } => execute_call(
             deps,
             info,
+            outgoing_envelope,
             msg_type,
             msg,
-            destination,
-            receive_caller,
-            is_response_expected,
-            execution_dependency,
+            x_data,
         ),
         ExecuteMsg::BroadcastCall { request } => execute_broadcast_call(deps, info, request),
         ExecuteMsg::FinishCall { vaas } => execute_finish_call(deps, info, vaas),
@@ -89,19 +83,19 @@ pub fn execute(
 pub fn execute_call(
     deps: DepsMut,
     info: MessageInfo,
-    msg_type: Option<String>,
-    msg: Binary,
-    destination: AccountInfo,
-    receive_caller: Option<String>,
-    is_response_expected: Option<bool>,
-    execution_dependency: Option<WormholeMessage>,
-) -> Result<Response, ContractError> {
+    outgoing_envelope: Envelope, 
+    msg_type: Option<String>, // e.g. ExecuteMsg, QueryMsg, InstatiateMsg, MigrateMsg, xData. null => ExecuteMsg
+    msg: Binary, // base64-encoded stringified JSON
+    x_data: Option<Binary>, // optional data, not used here
+) -> StdResult<Response>{
     let config = CONFIG.load(deps.storage)?;
     // query registry
     let registry_addr = deps.api.addr_validate(&config.x_chain_registry)?;
     let res: RegistryConfigResponse = deps
         .querier
         .query_wasm_smart(registry_addr, &RegistryQueryMsg::Config {})?;
+
+    let this_chain_info: ChainInfo = res.chain_info.into_iter().find(|x| x.wormhole_id==res.chain_id_here).ok_or_else(|| StdError::generic_err("registry missing this chain's wormhole info"))?;
 
     // registry config has wormhole address
 
@@ -114,7 +108,7 @@ pub fn execute_call(
     let mut submessages = Vec::new();
     submessages.push(SubMsg::reply_on_success(
         CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: res.wormhole_core_contract,
+            contract_addr: this_chain_info.wormhole_core,
             msg,
             funds: vec![],
         }),
@@ -128,7 +122,7 @@ pub fn execute_broadcast_call(
     deps: DepsMut,
     info: MessageInfo,
     request: Request,
-) -> Result<Response, ContractError> {
+) -> StdResult<Response>{
     Ok(Response::new())
 }
 
@@ -136,7 +130,7 @@ pub fn execute_finish_call(
     deps: DepsMut,
     info: MessageInfo,
     vaas: Vec<Binary>,
-) -> Result<Response, ContractError> {
+) ->StdResult<Response> {
     Ok(Response::new())
 }
 
@@ -147,7 +141,7 @@ pub fn execute_update_config(
     admin: AccountInfo,
     master: AccountInfo,
     slave: Option<AccountInfo>,
-) -> Result<Response, ContractError> {
+) -> StdResult<Response> {
     // TODO gate access
     // if config.admin.address != info.sender {
     //     return Err(ContractError::Unauthorized {});
@@ -169,7 +163,12 @@ pub fn execute_update_config(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
-        QueryMsg::VerifyVAA { vaa } => to_binary(&query_parse_and_verify_vaa(deps, env, vaa)?),
+        QueryMsg::Config {} => {
+            let config: Config = CONFIG.load(deps.storage)?;
+
+            Ok(to_binary(&config)?)
+        }
+        //QueryMsg::VerifyVAA { vaa } => to_binary(&query_parse_and_verify_vaa(deps, env, vaa)?),
     }
 }
 
@@ -184,8 +183,10 @@ fn parse_vaa(deps: Deps, block_time: u64, data: &Binary) -> StdResult<ParsedVAA>
         .querier
         .query_wasm_smart(registry_addr, &RegistryQueryMsg::Config {})?;
 
+    let this_chain_info: ChainInfo = res.chain_info.into_iter().find(|x| x.wormhole_id==res.chain_id_here).ok_or_else(|| StdError::generic_err("registry missing this chain's wormhole info"))?;
+
     let vaa: ParsedVAA = deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
-        contract_addr: res.wormhole_core_contract.into(),
+        contract_addr: this_chain_info.wormhole_core.into(),
         msg: to_binary(&WormholeQueryMsg::VerifyVAA {
             vaa: data.clone(),
             block_time,

@@ -12,10 +12,10 @@ pub struct Config {
 
 #[cw_serde]
 pub struct InstantiateMsg {
-    x_chain_registry_address: String,
-    admin: AccountInfo,
-    master: AccountInfo,
-    slave: Option<AccountInfo>,
+    pub x_chain_registry_address: String,
+    pub admin: AccountInfo,
+    pub master: AccountInfo,
+    pub slave: Option<AccountInfo>,
 }
 
 #[cw_serde]
@@ -38,4 +38,9 @@ pub enum ExecuteMsg {
         master: AccountInfo,
         slave: Option<AccountInfo>,
     },
+}
+
+#[cw_serde]
+pub enum QueryMsg{
+    Config{},
 }
