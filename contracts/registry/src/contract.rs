@@ -4,7 +4,7 @@ use cosmwasm_std::{to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response,
 // use cw2::set_contract_version;
 
 use crate::state::{Config, CONFIG};
-use xca::registry::{Chain, ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
+use xca::registry::{ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
 
 /*
 // version info for migration info
@@ -22,10 +22,9 @@ pub fn instantiate(
     CONFIG.save(
         deps.storage,
         &Config {
-            wormhole_core_contract: deps.api.addr_validate(&msg.wormhole_core_contract)?,
-            x_account_factory: deps.api.addr_validate(&msg.x_account_factory)?,
-            wormhole_chain_ids: msg.wormhole_chain_ids,
+            chain_id_here: msg.chain_id_here,
             x_account_code_id: msg.x_account_code_id,
+            chain_info: vec![],
         },
     )?;
 
@@ -41,21 +40,11 @@ pub fn execute(
 ) -> StdResult<Response> {
     match msg {
         ExecuteMsg::UpdateConfig {
-            wormhole_core_contract,
-            x_account_factory,
             x_account_code_id,
         } => {
             let mut config: Config = CONFIG.load(deps.storage)?;
 
             // TODO: access check - if config.wormhole_core_contract != owner
-
-            if let Some(wormhole_core_contract) = wormhole_core_contract {
-                config.wormhole_core_contract = deps.api.addr_validate(&wormhole_core_contract)?;
-            }
-
-            if let Some(x_account_factory) = x_account_factory {
-                config.x_account_factory = deps.api.addr_validate(&x_account_factory)?;
-            }
 
             if let Some(x_account_code_id) = x_account_code_id {
                 config.x_account_code_id = x_account_code_id;
@@ -65,24 +54,21 @@ pub fn execute(
 
             Ok(Response::new())
         }
-        ExecuteMsg::UpsertWormholeChainId { chain } => {
+        ExecuteMsg::UpsertChainInfo { chain_info } => {
             let mut config: Config = CONFIG.load(deps.storage)?;
 
             // TODO: access check - if config.wormhole_core_contract != owner
 
             let position = config
-                .wormhole_chain_ids
+                .chain_info
                 .iter()
-                .position(|x| x.name == chain.name);
+                .position(|x| x.wormhole_id == chain_info.wormhole_id);
 
             if let Some(position) = position {
-                config.wormhole_chain_ids.remove(position);
+                config.chain_info.remove(position);
             }
 
-            config.wormhole_chain_ids.push(Chain {
-                name: chain.name,
-                wormhole_id: chain.wormhole_id,
-            });
+            config.chain_info.push(chain_info);
 
             CONFIG.save(deps.storage, &config)?;
 
@@ -98,10 +84,9 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
             let config: Config = CONFIG.load(deps.storage)?;
 
             Ok(to_binary(&ConfigResponse {
-                wormhole_core_contract: config.wormhole_core_contract.to_string(),
-                x_account_factory: config.x_account_factory.to_string(),
-                wormhole_chain_ids: config.wormhole_chain_ids,
+                chain_id_here: config.chain_id_here,
                 x_account_code_id: config.x_account_code_id,
+                chain_info: config.chain_info,
             })?)
         }
     }
