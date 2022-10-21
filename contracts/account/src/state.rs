@@ -19,6 +19,8 @@ pub struct XRequest{
   
   pub emitter_chain_id: u64,
   pub emitter_address: [u8;32],
+  
+  pub nonce: u32,
 
   // filled by sender
   pub destination_chain: u64,
@@ -65,7 +67,8 @@ impl XRequest{
     let request_status = data.get_u8(227);
     let response_chain_id = data.get_u64(228);
     let response_sequence = data.get_u64(236);
-    let payload = data[244..].to_vec();
+    let nonce = data.get_u32(244);
+    let payload = data[248..].to_vec();
 
     Ok(XRequest{
       status,
@@ -75,6 +78,7 @@ impl XRequest{
       sender_address,
       emitter_chain_id,
       emitter_address,
+      nonce,
       destination_chain,
       destination_address,
       is_response_expected,

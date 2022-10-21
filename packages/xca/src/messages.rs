@@ -14,7 +14,6 @@ pub struct Envelope {
     pub sender: Option<AccountInfo>,
     pub emitter: Option<AccountInfo>,
     pub nonce: Option<u32>,
-    pub consistency_level: Option<u8>,
 
     // --- Filled in by sender ---
 	/*

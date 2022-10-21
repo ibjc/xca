@@ -100,8 +100,7 @@ pub fn execute_call(
     let mut outgoing_envelope = outgoing_envelope;
 
     //xaccount-deployer envelop details
-    outgoing_envelope.nonce = Some(0u32);
-    outgoing_envelope.consistency_level = Some(1u8);
+    outgoing_envelope.nonce = Some(6969u32);
     outgoing_envelope.id = Some(RequestInfo{
         status: 1u8,
         x_account: AccountInfo{
@@ -126,11 +125,71 @@ pub fn execute_call(
         })?
     }))?;
 
+    let sender_address_hex_response: GetAddressHexResponse = deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart{
+        contract_addr: this_chain_info.wormhole_core.clone().into(),
+        msg: to_binary(&WormholeQueryMsg::QueryAddressHex{
+            address: info.sender.clone(),
+        })?
+    }))?;
 
+    let emitter_address_hex_response: GetAddressHexResponse = deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart{
+        contract_addr: this_chain_info.wormhole_core.clone().into(),
+        msg: to_binary(&WormholeQueryMsg::QueryAddressHex{
+            address: env.contract.address.clone(),
+        })?
+    }))?;
 
+    let destination_address_hex_response: GetAddressHexResponse = deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart{
+        contract_addr: this_chain_info.wormhole_core.clone().into(),
+        msg: to_binary(&WormholeQueryMsg::QueryAddressHex{
+            address: deps.api.addr_validate(&outgoing_envelope.destination_address)?,
+        })?
+    }))?;
+
+    let caller_hex: Option<String> = if let Some(caller) = outgoing_envelope.caller{
+        let caller_address_hex_response: GetAddressHexResponse = deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart{
+            contract_addr: this_chain_info.wormhole_core.clone().into(),
+            msg: to_binary(&WormholeQueryMsg::QueryAddressHex{
+                address: deps.api.addr_validate(&caller)?,
+            })?
+        }))?;
+
+        Some(caller_address_hex_response.hex)
+    } else {
+        None
+    };
 
     //create xrequest
+    let request: XRequest = XRequest{
+        status: outgoing_envelope.id.status,
+        request_chain_id: outgoing_envelope.id.x_account.chain_id,
+        request_address: request_address_hex_response.hex.as_slice().into(),
+        sender_chain_id: outgoing_envelope.sender.chain_id,
+        sender_address: sender_address_hex_response.hex.as_slice().into(),
+        emitter_chain_id: outgoing_envelope.emitter.chain_id,
+        emitter_address: emitter_address_hex_response.hex.as_slice().into(),
+        nonce: outgoing_envelope.nonce,
+        destination_chain: outgoing_envelope.destination_chain,
+        destination_address: outgoing_envelope.destination_address_hex_response.hex.as_slice().into(),
+        is_response_expected: outgoing_envelope.is_response_expected,
+        is_executable: outgoing_envelope.is_executable,
+        caller: if Some(caller_hex) = caller_hex{
+            caller_hex.as_slice().into()
+        } else {
+            [0u8;32]
+        },
+        response_of_chain_id: outgoing_envelope.response_of.chain_id,
+        response_of_sequence: outgoing_envelope.response_of.sequence,
+        request_status: RequestStatus::PENDING,
 
+
+        
+        response_chain_id:  outgoing_envelope.response_of.chain_id,
+        response_of_sequence: outgoing_envelope.response_of.sequence,
+        payload: 
+
+
+    }
 
 
     Ok(Response::new())
