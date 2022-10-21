@@ -25,8 +25,8 @@ pub struct Envelope {
     pub destination_chain: u64,
     pub destination_address: String,
 
-    pub is_response_expected: bool,
-    pub is_executable: bool,
+    pub is_response_expected: u8,
+    pub is_executable: u8,
     pub execution_dependency: Option<RequestId>,
 
     /* 
@@ -72,7 +72,7 @@ pub struct AccountInfo{
 #[cw_serde]
 pub struct RequestStatus;
 
-impl Request {
+impl RequestStatus {
     pub const PENDING: u8 = 1;
     pub const COMPLETE: u8 = 2;
     pub const FAILED: u8 = 3;

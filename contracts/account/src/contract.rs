@@ -6,9 +6,10 @@ use cosmwasm_std::{
 };
 use cw2::set_contract_version;
 use xca::account::{Config, ExecuteMsg, InstantiateMsg, QueryMsg};
-use xca::messages::{AccountInfo, ParsedVAA, Envelope, Request, RequestInfo};
+use xca::messages::{AccountInfo, ParsedVAA, Envelope, Request, RequestInfo, RequestStatus};
 use xca::registry::{ChainInfo, ConfigResponse as RegistryConfigResponse, QueryMsg as RegistryQueryMsg};
-use xca::wormhole::{WormholeQueryMsg, GetAddressHexResponse};
+use xca::wormhole::{WormholeQueryMsg, GetAddressHexResponse, WormholeExecuteMsg};
+use xca::byte_utils::ByteUtils;
 
 use crate::state::{CONFIG, XRequest};
 
@@ -159,40 +160,57 @@ pub fn execute_call(
         None
     };
 
+    //figure out payload based on type + binary
+    let is_executable: u8 = if let Some(msg_type) = msg_type{
+        if msg_type == String::from("QueryMsg"){
+            0u8
+        } else {
+            1u8
+        }
+    } else {
+        1u8
+    };
+
     //create xrequest
     let request: XRequest = XRequest{
-        status: outgoing_envelope.id.status,
-        request_chain_id: outgoing_envelope.id.x_account.chain_id,
-        request_address: request_address_hex_response.hex.as_slice().into(),
-        sender_chain_id: outgoing_envelope.sender.chain_id,
-        sender_address: sender_address_hex_response.hex.as_slice().into(),
-        emitter_chain_id: outgoing_envelope.emitter.chain_id,
-        emitter_address: emitter_address_hex_response.hex.as_slice().into(),
-        nonce: outgoing_envelope.nonce,
+        status: outgoing_envelope.id.clone().unwrap().status,
+        request_chain_id: outgoing_envelope.id.unwrap().x_account.chain_id,
+        request_address: request_address_hex_response.hex.as_bytes().to_vec(),
+        sender_chain_id: outgoing_envelope.sender.unwrap().chain_id,
+        sender_address: sender_address_hex_response.hex.as_bytes().to_vec(),
+        emitter_chain_id: outgoing_envelope.emitter.unwrap().chain_id,
+        emitter_address: emitter_address_hex_response.hex.as_bytes().to_vec(),
+        nonce: outgoing_envelope.nonce.unwrap(),
         destination_chain: outgoing_envelope.destination_chain,
-        destination_address: outgoing_envelope.destination_address_hex_response.hex.as_slice().into(),
+        destination_address: destination_address_hex_response.hex.as_bytes().to_vec(),
         is_response_expected: outgoing_envelope.is_response_expected,
-        is_executable: outgoing_envelope.is_executable,
-        caller: if Some(caller_hex) = caller_hex{
-            caller_hex.as_slice().into()
+        is_executable: is_executable,
+        execution_dependency_chain_id: 0u64,
+        execution_dependency_sequence: 0u64,
+        caller: if let Some(caller_hex) = caller_hex{
+            caller_hex.as_bytes().to_vec()
         } else {
-            [0u8;32]
+            [0u8;32].to_vec()
         },
-        response_of_chain_id: outgoing_envelope.response_of.chain_id,
-        response_of_sequence: outgoing_envelope.response_of.sequence,
+        response_of_chain_id: outgoing_envelope.response_of.clone().unwrap().chain_id,
+        response_of_sequence: outgoing_envelope.response_of.clone().unwrap().sequence,
         request_status: RequestStatus::PENDING,
 
+        response_chain_id: this_chain_info.wormhole_id,
+        response_sequence: outgoing_envelope.response_of.clone().unwrap().sequence,
+        payload: msg.into(),
+    };
 
-        
-        response_chain_id:  outgoing_envelope.response_of.chain_id,
-        response_of_sequence: outgoing_envelope.response_of.sequence,
-        payload: 
+    let msg: CosmosMsg = CosmosMsg::Wasm(WasmMsg::Execute{
+        contract_addr: this_chain_info.wormhole_core.into(),
+        funds: vec![],
+        msg: to_binary(&WormholeExecuteMsg::PostMessage{
+            message: request.serialize().into(),
+            nonce: 6969u32,
+        })?,
+    });
 
-
-    }
-
-
-    Ok(Response::new())
+    Ok(Response::new().add_message(msg))
 }
 
 pub fn execute_broadcast_call(

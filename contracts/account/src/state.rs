@@ -12,26 +12,26 @@ pub struct XRequest{
   // filled by the xAccount deployer
   pub status: u8,
   pub request_chain_id: u64,
-  pub request_address: [u8;32],
+  pub request_address: Vec<u8>,
 
   pub sender_chain_id: u64,
-  pub sender_address: [u8;32],
+  pub sender_address: Vec<u8>,
   
   pub emitter_chain_id: u64,
-  pub emitter_address: [u8;32],
+  pub emitter_address: Vec<u8>,
   
   pub nonce: u32,
 
   // filled by sender
   pub destination_chain: u64,
-  pub destination_address: [u8;32],
+  pub destination_address: Vec<u8>,
 
   pub is_response_expected: u8,
   pub is_executable: u8,
   pub execution_dependency_chain_id: u64,
   pub execution_dependency_sequence: u64,
 
-  pub caller: [u8;32],
+  pub caller: Vec<u8>,
 
   pub response_of_chain_id: u64,
   pub response_of_sequence: u64,
@@ -73,19 +73,19 @@ impl XRequest{
     Ok(XRequest{
       status,
       request_chain_id,
-      request_address,
+      request_address: request_address.into(),
       sender_chain_id,
-      sender_address,
+      sender_address: sender_address.into(),
       emitter_chain_id,
-      emitter_address,
+      emitter_address: emitter_address.into(),
       nonce,
       destination_chain,
-      destination_address,
+      destination_address: destination_address.into(),
       is_response_expected,
       is_executable,
       execution_dependency_chain_id,
       execution_dependency_sequence,
-      caller,
+      caller: caller.into(),
       response_of_chain_id,
       response_of_sequence,
       request_status,
@@ -99,7 +99,7 @@ impl XRequest{
     [
       self.status.to_be_bytes().to_vec(),
       self.request_chain_id.to_be_bytes().to_vec(),
-      self.request_address.to_vec(),
+      self.request_address[0..32].to_vec(),
       self.sender_chain_id.to_be_bytes().to_vec(),
       self.sender_address.to_vec(),
       self.emitter_chain_id.to_be_bytes().to_vec(),
