@@ -2,18 +2,15 @@
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     to_binary, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, QueryRequest, Response,
-    StdResult, SubMsg, WasmMsg, WasmQuery, StdError,
+    StdResult, SubMsg, WasmMsg, WasmQuery, StdError, Addr
 };
 use cw2::set_contract_version;
 use xca::account::{Config, ExecuteMsg, InstantiateMsg, QueryMsg};
-use xca::byte_utils::ByteUtils;
-use xca::error::ContractError as XcaContractError;
-use xca::messages::{AccountInfo, ParsedVAA, Envelope, Request};
+use xca::messages::{AccountInfo, ParsedVAA, Envelope, Request, RequestInfo};
 use xca::registry::{ChainInfo, ConfigResponse as RegistryConfigResponse, QueryMsg as RegistryQueryMsg};
-use xca::wormhole::WormholeQueryMsg;
+use xca::wormhole::{WormholeQueryMsg, GetAddressHexResponse};
 
-use crate::error::ContractError;
-use crate::state::CONFIG;
+use crate::state::{CONFIG, XRequest};
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:account";
@@ -51,7 +48,7 @@ pub fn instantiate(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     info: MessageInfo,
     msg: ExecuteMsg,
 ) -> StdResult<Response> {
@@ -63,6 +60,7 @@ pub fn execute(
             x_data, // optional data, not used here
         } => execute_call(
             deps,
+            env,
             info,
             outgoing_envelope,
             msg_type,
@@ -82,40 +80,60 @@ pub fn execute(
 
 pub fn execute_call(
     deps: DepsMut,
+    env: Env,
     info: MessageInfo,
     outgoing_envelope: Envelope, 
     msg_type: Option<String>, // e.g. ExecuteMsg, QueryMsg, InstatiateMsg, MigrateMsg, xData. null => ExecuteMsg
     msg: Binary, // base64-encoded stringified JSON
     x_data: Option<Binary>, // optional data, not used here
 ) -> StdResult<Response>{
-    let config = CONFIG.load(deps.storage)?;
+    let config: Config = CONFIG.load(deps.storage)?;
+
     // query registry
-    let registry_addr = deps.api.addr_validate(&config.x_chain_registry)?;
+    let registry_addr: Addr = deps.api.addr_validate(&config.x_chain_registry)?;
     let res: RegistryConfigResponse = deps
         .querier
         .query_wasm_smart(registry_addr, &RegistryQueryMsg::Config {})?;
 
-    let this_chain_info: ChainInfo = res.chain_info.into_iter().find(|x| x.wormhole_id==res.chain_id_here).ok_or_else(|| StdError::generic_err("registry missing this chain's wormhole info"))?;
+    let this_chain_info: ChainInfo = res.chain_info.into_iter().find(|x| x.wormhole_id==res.chain_id_here).ok_or_else(|| StdError::generic_err("missing local chain info in registry")).unwrap();
 
-    // registry config has wormhole address
+    let mut outgoing_envelope = outgoing_envelope;
 
-    // send call to other chain's xaccount
-    // pub x_chain_registry: String,   // Updatable by admins
-    // pub admin: AccountInfo,         // Can update Config. (chain, addr)
-    // pub master: AccountInfo,        // Can accept VAA executions from these. (chain, addr)
-    // pub slave: Option<AccountInfo>, //
+    //xaccount-deployer envelop details
+    outgoing_envelope.nonce = Some(0u32);
+    outgoing_envelope.consistency_level = Some(1u8);
+    outgoing_envelope.id = Some(RequestInfo{
+        status: 1u8,
+        x_account: AccountInfo{
+            chain_id: this_chain_info.wormhole_id,
+            address: info.sender.clone().into(),
+        },
+    });
+    outgoing_envelope.sender = Some(AccountInfo{
+        chain_id: this_chain_info.wormhole_id,
+        address: info.sender.clone().into(),
+    });
+    outgoing_envelope.emitter = Some(AccountInfo{
+        chain_id: this_chain_info.wormhole_id,
+        address: env.contract.address.clone().into(),
+    });
 
-    let mut submessages = Vec::new();
-    submessages.push(SubMsg::reply_on_success(
-        CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: this_chain_info.wormhole_core,
-            msg,
-            funds: vec![],
-        }),
-        POST_REPLY_ID,
-    ));
+    //fetch hex'd verison of every address
+    let request_address_hex_response: GetAddressHexResponse = deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart{
+        contract_addr: this_chain_info.wormhole_core.clone().into(),
+        msg: to_binary(&WormholeQueryMsg::QueryAddressHex{
+            address: info.sender.clone(),
+        })?
+    }))?;
 
-    Ok(Response::new().add_submessages(submessages))
+
+
+
+    //create xrequest
+
+
+
+    Ok(Response::new())
 }
 
 pub fn execute_broadcast_call(

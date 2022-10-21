@@ -96,3 +96,9 @@ pub struct ParsedVAA {
 
     pub hash: Vec<u8>,
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct GetAddressHexResponse {
+    pub hex: String,
+}

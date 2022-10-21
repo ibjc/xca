@@ -9,21 +9,37 @@ use sha3::{Digest, Keccak256};
 #[cw_serde]
 pub struct Envelope {
 
+    // --- Filled in by xAccount ---
     pub id: Option<RequestInfo>,
     pub sender: Option<AccountInfo>,
     pub emitter: Option<AccountInfo>,
     pub nonce: Option<u32>,
     pub consistency_level: Option<u8>,
 
-    pub destination_chain: Option<Vec<u8>>,
-    pub destination_address: Option<Vec<String>>,
+    // --- Filled in by sender ---
+	/*
+	Destination chain and address of request
+	destination_chain == "0" for all receivers to process request
+
+
+	*/
+    pub destination_chain: u64,
+    pub destination_address: String,
 
     pub is_response_expected: bool,
     pub is_executable: bool,
     pub execution_dependency: Option<RequestId>,
 
+    /* 
+	Optional caller designation - possible use for smart contracts to execute logic atomically right after VAA receival 
+	null to allow relayers to finish receival on behalf of receiver
+	*/ 
     pub caller: Option<String>,
 
+    /*
+	filled if request is a response of a previous request. 
+	Sequence of VAA that triggered this response 
+	*/
     pub response_of: Option<RequestId>,
 
 }
@@ -44,7 +60,7 @@ pub struct RequestId{
 
 #[cw_serde]
 pub struct RequestInfo {
-	pub status: RequestStatus, 
+	pub status: u8, 
 	pub x_account: AccountInfo // used if a xAccount pair is being deployed. Stores the newly deployed xAccount of chain_id_here 
 }
 
@@ -55,10 +71,12 @@ pub struct AccountInfo{
 }
 
 #[cw_serde]
-pub enum RequestStatus{
-    Pending,
-    Complete,
-    Failed
+pub struct RequestStatus;
+
+impl Request {
+    pub const PENDING: u8 = 1;
+    pub const COMPLETE: u8 = 2;
+    pub const FAILED: u8 = 3;
 }
 
 // Validator Action Approval(VAA) data
