@@ -26,9 +26,6 @@ pub enum ExecuteMsg {
         msg: Binary, // base64-encoded stringified JSON
         x_data: Option<Binary>, // optional data, not used here
     },
-    BroadcastCall {
-        request: Request,
-    },
     FinishCall {
         vaas: Vec<Binary>,
     },

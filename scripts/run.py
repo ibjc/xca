@@ -273,7 +273,7 @@ def inj_bank_msg_send(recipient, amount, wallet, inj):
 
 #terra-side
 terra_registry_id = deploy_local_wasm("/repos/xca/artifacts/registry.wasm", wallet, terra)
-terra_account_id = "69"
+terra_account_id = deploy_local_wasm("/repos/xca/artifacts/account.wasm", wallet, terra)
 
 terra_multisig_code_id = deploy_local_wasm("/repos/cw-plus/artifacts/cw3_fixed_multisig.wasm", wallet, terra)
 
@@ -281,7 +281,7 @@ terra_staking_id = deploy_local_wasm("/repos/xca/artifacts/staking.wasm", wallet
 
 #inj-side
 inj_registry_id = inj_deploy_local_wasm("/repos/xca/artifacts/registry.wasm", inj_wallet, inj)
-inj_account_id = "69"
+inj_account_id = inj_deploy_local_wasm("/repos/xca/artifacts/account.wasm", inj_wallet, inj)
 
 inj_multisig_code_id = inj_deploy_local_wasm("/repos/cw-plus/artifacts/cw3_fixed_multisig.wasm", inj_wallet, inj)
 
@@ -304,46 +304,128 @@ inj_xca_factory = "inj1xx3aupmgv3ce537c0yce8zzd3sz567syuyedpg"
 
 #create registry on terra
 init_registry_terra = {
-  "wormhole_core_contract": terra_wormhole_core_contract,
-  "x_account_factory" : terra_xca_factory,
-  "wormhole_chain_ids": [
-    {
-      "name": "terra",
-      "wormhole_id": 18,
-    },
-    {
-      "name": "injective",
-      "wormhole_id": 19,
-    }
-  ],
-  "x_account_code_id": int(terra_account_id),
+  "chain_id_here": 18,
+  "x_account_code_id": int(terra_account_id)
 }
 
 init_result = init_contract(terra_registry_id, init_registry_terra, wallet, terra, "terra_registry")
 terra_registry_address= init_result.logs[0].events_by_type["instantiate"]["_contract_address"][0]
 
+execute_msg(terra_registry_address, {"upsert_chain_info": {
+  "chain_info":{
+  "wormhole_id": 18,
+  "wormhole_core": terra_wormhole_core_contract,
+  "x_account_factory": wallet.key.acc_address,
+  "x_account_deployer": wallet.key.acc_address,
+}}}, wallet, terra)
+
+execute_msg(terra_registry_address, {"upsert_chain_info": {
+  "chain_info":{
+  "wormhole_id": 19,
+  "wormhole_core": inj_wormhole_core_contract,
+  "x_account_factory": inj_wallet.key.acc_address,
+  "x_account_deployer": inj_wallet.key.acc_address,
+}}}, wallet, terra)
+
 
 #create registry on inj
 init_registry_inj = {
-  "wormhole_core_contract": inj_wormhole_core_contract,
-  "x_account_factory" : inj_xca_factory,
-  "wormhole_chain_ids": [
-    {
-      "name": "terra",
-      "wormhole_id": 18,
-    },
-    {
-      "name": "injective",
-      "wormhole_id": 19,
-    }
-  ],
-  "x_account_code_id": int(inj_account_id),
+  "chain_id_here": 19,
+  "x_account_code_id": int(inj_account_id)
 }
 
 init_result = inj_init_contract(inj_registry_id, init_registry_inj, inj_wallet, inj, "inj_registry")
-inj_registry_address = init_result.logs[0].events_by_type["instantiate"]["_contract_address"][0]
+inj_registry_address= init_result.logs[0].events_by_type["instantiate"]["_contract_address"][0]
+
+inj_execute_msg(inj_registry_address, {"upsert_chain_info": {
+  "chain_info":{
+  "wormhole_id": 18,
+  "wormhole_core": terra_wormhole_core_contract,
+  "x_account_factory": wallet.key.acc_address,
+  "x_account_deployer": wallet.key.acc_address,
+}}}, inj_wallet, inj)
+
+inj_execute_msg(inj_registry_address, {"upsert_chain_info": {
+  "chain_info":{
+  "wormhole_id": 19,
+  "wormhole_core": inj_wormhole_core_contract,
+  "x_account_factory": inj_wallet.key.acc_address,
+  "x_account_deployer": inj_wallet.key.acc_address,
+}}}, inj_wallet, inj)
+
+################################################
+# account deploy
+################################################
+
+#create xaccount on terra
+init_xaccount_terra = {
+  "x_chain_registry_address": terra_registry_address,
+  "admin": {
+    "chain_id": 19,
+    "address": inj_wallet.key.acc_address,
+  },
+  "master": {
+    "chain_id": 19,
+    "address": inj_wallet.key.acc_address,
+  },
+
+}
+
+init_result = init_contract(terra_account_id, init_xaccount_terra, wallet, terra, "terra_xaccount_deployer")
+terra_xaccount_address= init_result.logs[0].events_by_type["instantiate"]["_contract_address"][0]
+
+#create registry on inj
+init_xaccount_inj = {
+  "x_chain_registry_address": inj_registry_address,
+  "admin": {
+    "chain_id": 19,
+    "address": inj_wallet.key.acc_address,
+  },
+  "master": {
+    "chain_id": 19,
+    "address": inj_wallet.key.acc_address,
+  },
+
+}
+
+init_result = inj_init_contract(inj_account_id, init_xaccount_inj, inj_wallet, inj, "inj_xaccount_deployer")
+inj_xaccount_address= init_result.logs[0].events_by_type["instantiate"]["_contract_address"][0]
 
 
+terra.wasm.contract_query(terra_wormhole_core_contract, {"query_address_hex":{"address": terra_xaccount_address}})
+
+#init contract on inj
+message = {
+  "call":{
+    "outgoing_envelope":{
+      "destination_chain": 18,
+      "destination_address": 
+      "4fae631a8fe88c178290fd7ae66abd8f59c96992d3a824315dcb68ce6c2c27f3",
+      "is_response_expected": 0,
+      "is_executable": 1,
+      "response_of":{
+        "chain_id": 18,
+        "sequence": 2,
+      },
+    },
+    "msg_type": "ExecuteMsg",
+    "msg": to_binary({
+            "denom_name": "uluna",
+          }),
+      }
+  }
+inj_execute_msg(inj_xaccount_address, message, inj_wallet, inj)
+
+
+
+inj_xaccount_address_standardized = "00000000000000000000000098582c96514cdfb7080db7d2982eaf6591d48f21"
+inj_xaccount_sequence = 0
+base_url = "https://wormhole-v2-testnet-api.certus.one/v1/signed_vaa/"
+
+to_terra_vaa_resp = requests.get(f"{base_url}19/{inj_xaccount_address_standardized}/{inj_xaccount_sequence}")
+
+
+result = execute_msg(terra_xaccount_address, {"finish_call":{"vaas":[to_terra_vaa_resp.json()["vaaBytes"]]}}, wallet, terra)
 
 ################################################
 # cw3 deploy

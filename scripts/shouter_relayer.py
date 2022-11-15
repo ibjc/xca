@@ -35,6 +35,7 @@ import hashlib
 
 from web3 import Web3
 from web3.middleware import construct_sign_and_send_raw_middleware
+import requests
 
 ################################################
 # inj objects
@@ -266,8 +267,8 @@ inj_shouter_contract_standardized = "000000000000000000000000a152ed452911e059402
 inj_shouter_sequence = 0
 
 
-evm_shouter_contract = "0x7fac7bab2e22cef65700d880fe4e7790331665f4"
-evm_shouter_contract_standardized = "0000000000000000000000007fac7bab2e22cef65700d880fe4e7790331665f4"
+evm_shouter_contract = "0x185589c355b1499a3775147d9f3c4f5e19154eee"
+evm_shouter_contract_standardized = "000000000000000000000000" + evm_shouter_contract[2:]
 evm_shouter_sequence = 0
 
 abi_dict = {}
@@ -293,28 +294,33 @@ base_url = "https://wormhole-v2-testnet-api.certus.one/v1/signed_vaa/"
 # main loop
 ################################################
 
-while True:
+attempts = 10
 
-  time.sleep(2)
+for _ in range(attempts):
 
-  to_inj_vaa_resp = requests.get(f"{base_url}2/{evm_shouter_contract_standardized}/{evm_shouter_sequence}")
+    time.sleep(0.1)
 
-  if to_inj_vaa_resp.status_code == 200:
-    #relay to injective
+    to_inj_vaa_resp = requests.get(f"{base_url}2/{evm_shouter_contract_standardized}/{evm_shouter_sequence}")
 
-    execute_msg(inj_shouter_contract, {"submit_vaa":{"vaa": to_inj_vaa_resp.json()["vaaBytes"]}}, wallet, inj)
+    if to_inj_vaa_resp.status_code == 200:
+        #relay to injective
+
+        print(f"relaying to inj: {to_inj_vaa_resp.text}")
+        execute_msg(inj_shouter_contract, {"submit_vaa":{"vaa": to_inj_vaa_resp.json()["vaaBytes"]}}, wallet, inj)
+        break
     evm_shouter_sequence += 1
-
-    print(f"relaying to inj: {to_inj_vaa_resp.text}")
-    continue
-
-  to_evm_vaa_resp = requests.get(f"{base_url}19/{inj_shouter_contract_standardized}/{inj_shouter_sequence}")  
+    
+for _ in range(attempts):
+    time.sleep(0.1)
+    
+    to_evm_vaa_resp = requests.get(f"{base_url}19/{inj_shouter_contract_standardized}/{inj_shouter_sequence}")  
   
-  if to_evm_vaa_resp.status_code == 200:
-    #relay to goerli
-
-    evm_shouter_object.functions.receiveVAA(base64.b64decode(to_evm_vaa_resp.json()["vaaBytes"])).transact()
+    if to_evm_vaa_resp.status_code == 200:
+        #relay to goerli
+        print(f"relaying to evm: {base64.b64decode(to_evm_vaa_resp.json()['vaaBytes'])}")
+        print(f"relaying text to evm: {to_evm_vaa_resp.text}")
+        evm_shouter_object.functions.receiveVAA(base64.b64decode(to_evm_vaa_resp.json()["vaaBytes"])).transact()
+        break
     inj_shouter_sequence += 1
 
-    print(f"relaying to evm: {to_evm_vaa_resp.text}")
-    continue
+print("Complete!")

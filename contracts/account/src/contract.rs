@@ -2,7 +2,7 @@
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     to_binary, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, QueryRequest, Response,
-    StdResult, SubMsg, WasmMsg, WasmQuery, StdError, Addr
+    StdResult, SubMsg, WasmMsg, WasmQuery, StdError, Addr, from_binary, Reply
 };
 use cw2::set_contract_version;
 use xca::account::{Config, ExecuteMsg, InstantiateMsg, QueryMsg};
@@ -10,6 +10,7 @@ use xca::messages::{AccountInfo, ParsedVAA, Envelope, Request, RequestInfo, Requ
 use xca::registry::{ChainInfo, ConfigResponse as RegistryConfigResponse, QueryMsg as RegistryQueryMsg};
 use xca::wormhole::{WormholeQueryMsg, GetAddressHexResponse, WormholeExecuteMsg};
 use xca::byte_utils::ByteUtils;
+use xca::staking::{InstantiateMsg as StakingInitMsg};
 
 use crate::state::{CONFIG, XRequest};
 
@@ -46,6 +47,19 @@ pub fn instantiate(
         .add_attribute("contract-version", CONTRACT_VERSION))
 }
 
+#[entry_point]
+pub fn reply(deps: DepsMut, env: Env, reply: Reply) -> StdResult<Response> {
+    match reply.id {
+        POST_REPLY_ID => {
+
+
+
+            Ok(Response::new())
+        },
+        _ => Err(StdError::generic_err("invalid reply")),
+    }
+}
+
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(
     deps: DepsMut,
@@ -68,8 +82,7 @@ pub fn execute(
             msg,
             x_data,
         ),
-        ExecuteMsg::BroadcastCall { request } => execute_broadcast_call(deps, info, request),
-        ExecuteMsg::FinishCall { vaas } => execute_finish_call(deps, info, vaas),
+        ExecuteMsg::FinishCall { vaas } => execute_finish_call(deps, env, info, vaas),
         ExecuteMsg::UpdateConfig {
             x_chain_registry,
             admin,
@@ -140,13 +153,6 @@ pub fn execute_call(
         })?
     }))?;
 
-    let destination_address_hex_response: GetAddressHexResponse = deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart{
-        contract_addr: this_chain_info.wormhole_core.clone().into(),
-        msg: to_binary(&WormholeQueryMsg::QueryAddressHex{
-            address: deps.api.addr_validate(&outgoing_envelope.destination_address)?,
-        })?
-    }))?;
-
     let caller_hex: Option<String> = if let Some(caller) = outgoing_envelope.caller{
         let caller_address_hex_response: GetAddressHexResponse = deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart{
             contract_addr: this_chain_info.wormhole_core.clone().into(),
@@ -175,29 +181,29 @@ pub fn execute_call(
     let request: XRequest = XRequest{
         status: outgoing_envelope.id.clone().unwrap().status,
         request_chain_id: outgoing_envelope.id.unwrap().x_account.chain_id,
-        request_address: request_address_hex_response.hex.as_bytes().to_vec(),
+
+        /*
+        //request_address: request_address_hex_response.hex.as_bytes().to_vec(),
         sender_chain_id: outgoing_envelope.sender.unwrap().chain_id,
-        sender_address: sender_address_hex_response.hex.as_bytes().to_vec(),
+        //sender_address: sender_address_hex_response.hex.as_bytes().to_vec(),
         emitter_chain_id: outgoing_envelope.emitter.unwrap().chain_id,
-        emitter_address: emitter_address_hex_response.hex.as_bytes().to_vec(),
+        //emitter_address: emitter_address_hex_response.hex.as_bytes().to_vec(),
         nonce: outgoing_envelope.nonce.unwrap(),
         destination_chain: outgoing_envelope.destination_chain,
-        destination_address: destination_address_hex_response.hex.as_bytes().to_vec(),
+        //destination_address: outgoing_envelope.destination_address.as_bytes().to_vec(),
         is_response_expected: outgoing_envelope.is_response_expected,
         is_executable: is_executable,
         execution_dependency_chain_id: 0u64,
         execution_dependency_sequence: 0u64,
-        caller: if let Some(caller_hex) = caller_hex{
-            caller_hex.as_bytes().to_vec()
-        } else {
-            [0u8;32].to_vec()
-        },
+        
         response_of_chain_id: outgoing_envelope.response_of.clone().unwrap().chain_id,
         response_of_sequence: outgoing_envelope.response_of.clone().unwrap().sequence,
         request_status: RequestStatus::PENDING,
 
         response_chain_id: this_chain_info.wormhole_id,
         response_sequence: outgoing_envelope.response_of.clone().unwrap().sequence,
+        */
+
         payload: msg.into(),
     };
 
@@ -213,20 +219,78 @@ pub fn execute_call(
     Ok(Response::new().add_message(msg))
 }
 
-pub fn execute_broadcast_call(
-    deps: DepsMut,
-    info: MessageInfo,
-    request: Request,
-) -> StdResult<Response>{
-    Ok(Response::new())
-}
-
 pub fn execute_finish_call(
     deps: DepsMut,
+    env: Env,
     info: MessageInfo,
     vaas: Vec<Binary>,
 ) ->StdResult<Response> {
-    Ok(Response::new())
+
+    //fetch config
+    let config: Config = CONFIG.load(deps.storage)?;
+
+    // query registry
+    let registry_addr: Addr = deps.api.addr_validate(&config.x_chain_registry)?;
+    let res: RegistryConfigResponse = deps
+        .querier
+        .query_wasm_smart(registry_addr, &RegistryQueryMsg::Config {})?;
+
+    let this_chain_info: ChainInfo = res.chain_info.into_iter().find(|x| x.wormhole_id==res.chain_id_here).ok_or_else(|| StdError::generic_err("missing local chain info in registry")).unwrap();
+
+    let mut messages: Vec<CosmosMsg> = vec![];
+
+    for vaa in vaas{
+        let parsed_vaa: ParsedVAA = deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart{
+            contract_addr: this_chain_info.wormhole_core.clone().into(),
+            msg: to_binary(&WormholeQueryMsg::VerifyVAA{
+                vaa: vaa.clone(),
+                block_time: env.block.time.seconds(),
+            })?,
+        }))?;
+        
+        let request: XRequest = XRequest::deserialize(&parsed_vaa.payload)?;
+
+        /*
+        //confirm vaa's destination_chain matches
+        if request.destination_chain > 0u64 && request.destination_chain != this_chain_info.wormhole_id{
+            continue;
+        }
+
+        //confirm caller (ie relayer or not)
+        let caller = deps.api.addr_humanize(&(request.caller.as_slice()).get_address(0))?;
+        if request.caller != &[0u8;32] && caller != info.sender{
+            continue;
+        } 
+
+        //confirm emitter
+        let emitter_address = deps.api.addr_humanize(&(request.emitter_address.as_slice()).get_address(0))?;
+        if emitter_address != config.master.address || request.emitter_chain_id != config.master.chain_id{
+            continue;
+        }
+        */
+        
+        //let msg: CosmosMsg = from_binary(&request.payload.into())?;
+
+        let msg: CosmosMsg = CosmosMsg::Wasm(WasmMsg::Instantiate{
+            msg: to_binary(&StakingInitMsg{
+                denom_name: String::from("uluna")
+            })?,
+            funds: vec![],
+            label: String::from("staking_contract"),
+            code_id: 4998,
+            admin: None,
+        });
+
+        if 1==0{
+
+            return Err(StdError::generic_err(format!("{} {} ", request.status.to_string(), request.request_chain_id.to_string(), )))
+        }
+
+        messages.push(msg);
+    }
+
+
+    Ok(Response::new().add_messages(messages))
 }
 
 pub fn execute_update_config(
